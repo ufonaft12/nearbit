@@ -19,7 +19,7 @@ import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { addItem, removeItem, clearBasket, setStrategy } from '@/lib/store/basketSlice';
 import { BasketFloatingBar } from '@/app/components/BasketFloatingBar';
-import type { SearchResultWithStore, BasketResult, BasketItem } from '@/types/nearbit';
+import type { SearchResultWithStore, BasketResult, BasketItem, SearchStrategy } from '@/types/nearbit';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -195,7 +195,7 @@ interface DirectionProps {
   storeLng?: number | null;
 }
 
-function DirectionsButtons({ storeName, storeLat, storeLng }: DirectionProps) {
+const DirectionsButtons = memo(function DirectionsButtons({ storeName, storeLat, storeLng }: DirectionProps) {
   return (
     <div className="flex items-center gap-1 mt-1">
       <button
@@ -217,11 +217,11 @@ function DirectionsButtons({ storeName, storeLat, storeLng }: DirectionProps) {
       </button>
     </div>
   );
-}
+});
 
 // ─── BasketSummaryCard ────────────────────────────────────────────────────────
 
-function BasketSummaryCard({
+const BasketSummaryCard = memo(function BasketSummaryCard({
   basket,
   query,
 }: {
@@ -315,7 +315,7 @@ function BasketSummaryCard({
       </div>
     </div>
   );
-}
+});
 
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
@@ -323,10 +323,11 @@ interface ProductCardProps {
   result:      SearchResultWithStore;
   searchQuery: string;
   inBasket:    boolean;
-  onToggle:    (item: BasketItem) => void;
+  onAdd:       (item: BasketItem) => void;
+  onRemove:    (id: string) => void;
 }
 
-const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket, onToggle }: ProductCardProps) {
+const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket, onAdd, onRemove }: ProductCardProps) {
   const subtitle = useMemo(
     () => [r.nameEn, r.category, r.unit].filter(Boolean).join(' · '),
     [r.nameEn, r.category, r.unit],
@@ -338,16 +339,20 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
   const isLowStock   = r.quantity != null && r.quantity > 0 && r.quantity < 5;
   const isOutOfStock = r.quantity === 0;
 
-  const basketItem: BasketItem = {
-    id:        r.id,
-    name:      r.nameHe ?? r.normalizedName,
-    price:     r.price,
-    storeName: r.storeName,
-    storeId:   r.storeId,
-    query:     searchQuery,
-    storeLat:  r.storeLat,
-    storeLng:  r.storeLng,
-  };
+  const basketItem = useMemo<BasketItem>(
+    () => ({
+      id:        r.id,
+      name:      r.nameHe ?? r.normalizedName,
+      price:     r.price,
+      storeName: r.storeName,
+      storeId:   r.storeId,
+      query:     searchQuery,
+      storeLat:  r.storeLat,
+      storeLng:  r.storeLng,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [r.id, r.nameHe, r.normalizedName, r.price, r.storeName, r.storeId, searchQuery, r.storeLat, r.storeLng],
+  );
 
   return (
     <li
@@ -363,7 +368,7 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
         role="checkbox"
         aria-checked={inBasket}
         aria-label={inBasket ? `Remove ${r.nameHe ?? r.normalizedName} from basket` : `Add ${r.nameHe ?? r.normalizedName} to basket`}
-        onClick={() => { onToggle(basketItem); vibrate(20); }}
+        onClick={() => { inBasket ? onRemove(r.id) : onAdd(basketItem); vibrate(20); }}
         className={`mt-0.5 shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
           inBasket
             ? 'bg-green-500 border-green-500 text-white'
@@ -468,7 +473,16 @@ export default function Home() {
 
   const dispatch = useAppDispatch();
   const { items, strategy } = useAppSelector((s) => s.basket);
-  const hasItem = (id: string) => items.some((i) => i.id === id);
+  const hasItem = useCallback((id: string) => items.some((i) => i.id === id), [items]);
+
+  // Stable dispatch wrappers — passed as props to memo(ProductCard)
+  const handleAddItem    = useCallback((item: BasketItem) => dispatch(addItem(item)),    [dispatch]);
+  const handleRemoveItem = useCallback((id: string)      => dispatch(removeItem(id)),    [dispatch]);
+
+  // Throttled strategy toggle — prevents rapid-fire duplicate queries (leading edge, 400 ms)
+  const throttledSetStrategy = useRef(
+    throttle((s: SearchStrategy) => dispatch(setStrategy(s)), 400, { leading: true, trailing: false }),
+  ).current;
 
   // Ref used to auto-add the top result after an "Add X" voice command fires a search
   const pendingAutoAddQueryRef = useRef<string | null>(null);
@@ -558,20 +572,27 @@ export default function Home() {
   );
 
   // ── Geolocation ───────────────────────────────────────────────────────────
-  const requestLocation = useCallback(() => {
-    if (!navigator.geolocation) { setLocStatus('denied'); return; }
-    setLocStatus('requesting');
-    vibrate(30);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocStatus('active');
-        vibrate([30, 50, 30]);
+  // Throttled at 3 s (leading) — prevents rapid re-firing when already active
+  const requestLocation = useRef(
+    throttle(
+      () => {
+        if (!navigator.geolocation) { setLocStatus('denied'); return; }
+        setLocStatus('requesting');
+        vibrate(30);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            setLocStatus('active');
+            vibrate([30, 50, 30]);
+          },
+          () => setLocStatus('denied'),
+          { timeout: 10_000 },
+        );
       },
-      () => setLocStatus('denied'),
-      { timeout: 10_000 },
-    );
-  }, []);
+      3000,
+      { leading: true, trailing: false },
+    ),
+  ).current;
 
   // ── TanStack Query ─────────────────────────────────────────────────────────
   const { data, isFetching, isError, error, isSuccess } = useQuery({
@@ -704,7 +725,7 @@ export default function Home() {
             <div className="mt-3 flex items-center gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1 w-fit">
               <button
                 type="button"
-                onClick={() => dispatch(setStrategy('near'))}
+                onClick={() => throttledSetStrategy('near')}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   strategy === 'near'
                     ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
@@ -715,7 +736,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                onClick={() => dispatch(setStrategy('cheap'))}
+                onClick={() => throttledSetStrategy('cheap')}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   strategy === 'cheap'
                     ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
@@ -823,9 +844,8 @@ export default function Home() {
                       result={r}
                       searchQuery={committedQuery}
                       inBasket={hasItem(r.id)}
-                      onToggle={(item) =>
-                        dispatch(hasItem(r.id) ? removeItem(r.id) : addItem(item))
-                      }
+                      onAdd={handleAddItem}
+                      onRemove={handleRemoveItem}
                     />
                   ))}
                 </ul>
