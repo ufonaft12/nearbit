@@ -1,5 +1,7 @@
+import { createHash } from 'crypto';
 import OpenAI from 'openai';
 import type { NormalizedProduct, PosProduct, BasketResult } from '@/types/nearbit';
+import { redis, EMBED_TTL_SECONDS } from '@/lib/redis';
 
 // ============================================================
 // Nearbit – OpenAI Service Layer
@@ -145,12 +147,40 @@ Rules:
 }
 
 // ============================================================
-// semanticSearch
+// getQueryEmbedding
 // Generates an embedding for the user query and returns it
 // for use with the Supabase search_products RPC.
+//
+// Redis cache: embed:<sha256(normalized_query)>  TTL 7 days
+// Embeddings are deterministic per model version — same text always
+// produces the same vector, so we can safely cache indefinitely
+// (7 d is conservative enough to avoid stale vectors after model updates).
 // ============================================================
 export async function getQueryEmbedding(query: string): Promise<number[]> {
-  return generateEmbedding(query);
+  const normalized = query.trim().toLowerCase();
+  const cacheKey   = `embed:${createHash('sha256').update(normalized).digest('hex')}`;
+
+  if (redis) {
+    try {
+      const cached = await redis.get<number[]>(cacheKey);
+      if (cached) {
+        console.log(`[embed] cache HIT — "${normalized.slice(0, 40)}"`);
+        return cached;
+      }
+    } catch (err) {
+      console.warn('[embed] Redis read error (continuing without cache)', err);
+    }
+  }
+
+  const embedding = await generateEmbedding(normalized);
+
+  if (redis) {
+    redis
+      .set<number[]>(cacheKey, embedding, { ex: EMBED_TTL_SECONDS })
+      .catch((err) => console.warn('[embed] Redis write error', err));
+  }
+
+  return embedding;
 }
 
 // ── Shared persona prompt ────────────────────────────────────────────────────

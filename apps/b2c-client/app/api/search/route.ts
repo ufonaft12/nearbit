@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { supabaseAdmin } from '@/lib/supabase/client';
 import { getQueryEmbedding, generateSearchAnswer, generateBasketAnswer } from '@/lib/ai/openai';
-import { redis, CACHE_TTL_SECONDS } from '@/lib/redis';
+import { redis, CACHE_TTL_SECONDS, STORE_META_TTL_SECONDS } from '@/lib/redis';
 import type {
   SearchResult,
   SearchResultWithStore,
@@ -130,23 +130,62 @@ function parseBasketItems(query: string): string[] | null {
   return items.length >= 2 ? items : null;
 }
 
-/** Fetch store metadata for a set of store IDs. */
+type StoreMeta = { name: string; lat: number | null; lng: number | null };
+
+/**
+ * Fetch store metadata for a set of store IDs.
+ *
+ * Redis cache: store:<uuid>  TTL 1 h
+ * Hits Redis for each ID in parallel; only falls back to Supabase for misses.
+ * Store name / coordinates change rarely — 1 h TTL is a safe balance.
+ */
 async function fetchStoreMap(
   storeIds: string[],
-): Promise<Map<string, { name: string; lat: number | null; lng: number | null }>> {
-  const map = new Map<string, { name: string; lat: number | null; lng: number | null }>();
+): Promise<Map<string, StoreMeta>> {
+  const map = new Map<string, StoreMeta>();
   if (storeIds.length === 0) return map;
 
-  const { data: stores } = await supabaseAdmin
-    .from('stores')
-    .select('id, name, lat, lng')
-    .in('id', storeIds);
+  const missingIds: string[] = [];
 
-  (stores ?? []).forEach(
-    (s: { id: string; name: string; lat: number | null; lng: number | null }) => {
-      map.set(s.id, { name: s.name, lat: s.lat, lng: s.lng });
-    },
-  );
+  // 1. Batch-read from Redis
+  if (redis) {
+    const cached = await Promise.all(
+      storeIds.map((id) =>
+        redis!.get<StoreMeta>(`store:${id}`).catch(() => null),
+      ),
+    );
+    storeIds.forEach((id, i) => {
+      if (cached[i]) {
+        map.set(id, cached[i]!);
+      } else {
+        missingIds.push(id);
+      }
+    });
+  } else {
+    missingIds.push(...storeIds);
+  }
+
+  // 2. Fetch only the cache-misses from Supabase
+  if (missingIds.length > 0) {
+    const { data: stores } = await supabaseAdmin
+      .from('stores')
+      .select('id, name, lat, lng')
+      .in('id', missingIds);
+
+    (stores ?? []).forEach(
+      (s: { id: string; name: string; lat: number | null; lng: number | null }) => {
+        const meta: StoreMeta = { name: s.name, lat: s.lat, lng: s.lng };
+        map.set(s.id, meta);
+        // 3. Back-fill Redis asynchronously (fire-and-forget)
+        if (redis) {
+          redis
+            .set<StoreMeta>(`store:${s.id}`, meta, { ex: STORE_META_TTL_SECONDS })
+            .catch((err) => console.warn('[store-cache] Redis write error', err));
+        }
+      },
+    );
+  }
+
   return map;
 }
 
@@ -332,12 +371,15 @@ export async function GET(req: NextRequest) {
 
   // ── Cache key ─────────────────────────────────────────────────────────────
   // Basket key: sort items alphabetically so "milk, eggs" and "eggs, milk" share cache.
+  // storeFilter is appended when present so filtered results don't collide with
+  // global results for the same query.
   // Near Me results are location-dependent — never cache them.
+  const storeSegment = storeFilter ? `:store:${storeFilter}` : '';
   const cacheKey = isBasket
     ? `search:cache:basket:${createHash('sha256')
         .update([...basketItems!].sort().join('|').toLowerCase())
-        .digest('hex')}`
-    : `search:cache:${createHash('sha256').update(query.toLowerCase()).digest('hex')}`;
+        .digest('hex')}${storeSegment}`
+    : `search:cache:${createHash('sha256').update(query.toLowerCase()).digest('hex')}${storeSegment}`;
 
   // ── 0. Redis cache check (skipped for Near Me — results are location-dependent) ──
   if (redis && !isNear) {
