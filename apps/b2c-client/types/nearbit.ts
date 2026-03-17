@@ -47,3 +47,14 @@ export interface SearchResult {
   barcode: string | null;
   similarity: number;
 }
+
+/** SearchResult enriched with the resolved store display name. */
+export interface SearchResultWithStore extends SearchResult {
+  storeName: string;
+}
+
+/** Shape returned by GET /api/search */
+export interface SearchResponse {
+  answer: string;
+  results: SearchResultWithStore[];
+}
