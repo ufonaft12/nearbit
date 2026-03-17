@@ -16,9 +16,10 @@ import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 
 import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/lib/search';
-import { useBasket } from '@/lib/basket-context';
+import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
+import { addItem, removeItem, clearBasket, setStrategy } from '@/lib/store/basketSlice';
 import { BasketFloatingBar } from '@/app/components/BasketFloatingBar';
-import type { SearchResultWithStore, BasketResult, BasketItem, SearchStrategy } from '@/types/nearbit';
+import type { SearchResultWithStore, BasketResult, BasketItem } from '@/types/nearbit';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,17 +48,20 @@ function shareAnswerToWhatsApp(answer: string, query: string) {
 }
 
 function openInWaze(storeName: string, lat?: number | null, lng?: number | null) {
-  const url = lat && lng
-    ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
-    : `https://waze.com/livemap/directions?q=${encodeURIComponent(storeName + ' Israel')}`;
+  // Use != null (not &&) so that lat/lng = 0 is still treated as a valid coordinate
+  const url =
+    lat != null && lng != null
+      ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
+      : `https://waze.com/livemap/directions?q=${encodeURIComponent(storeName + ' Israel')}`;
   vibrate(30);
   window.open(url, '_blank', 'noopener');
 }
 
 function openInMaps(storeName: string, lat?: number | null, lng?: number | null) {
-  const url = lat && lng
-    ? `https://maps.google.com/maps?q=${lat},${lng}`
-    : `https://maps.google.com/maps?q=${encodeURIComponent(storeName + ' Israel')}`;
+  const url =
+    lat != null && lng != null
+      ? `https://maps.google.com/maps?q=${lat},${lng}`
+      : `https://maps.google.com/maps?q=${encodeURIComponent(storeName + ' Israel')}`;
   vibrate(30);
   window.open(url, '_blank', 'noopener');
 }
@@ -341,6 +345,8 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
     storeName: r.storeName,
     storeId:   r.storeId,
     query:     searchQuery,
+    storeLat:  r.storeLat,
+    storeLng:  r.storeLng,
   };
 
   return (
@@ -460,7 +466,9 @@ export default function Home() {
   const [userLocation, setUserLocation]     = useState<{ lat: number; lng: number } | null>(null);
   const [locStatus, setLocStatus]           = useState<LocStatus>('idle');
 
-  const { addItem, removeItem, hasItem, clearBasket, strategy, setStrategy } = useBasket();
+  const dispatch = useAppDispatch();
+  const { items, strategy } = useAppSelector((s) => s.basket);
+  const hasItem = (id: string) => items.some((i) => i.id === id);
 
   // Ref used to auto-add the top result after an "Add X" voice command fires a search
   const pendingAutoAddQueryRef = useRef<string | null>(null);
@@ -507,16 +515,15 @@ export default function Home() {
       const cmd = parseBasketCommand(trimmed);
       if (cmd) {
         if (cmd.type === 'clear') {
-          clearBasket();
+          dispatch(clearBasket());
           setInputValue('');
           return;
         }
         if (cmd.type === 'remove') {
-          // Best-effort: match by name substring (case-insensitive)
-          // We don't have direct access to items here — handled via context in the
-          // useEffect that fires when data changes; for 'remove' we use the hook directly.
-          // Since useBasket exposes removeItem(id) we need the id — instead, clear by name
-          // match is done below via the basket context items.
+          // Best-effort: match item by name substring (case-insensitive)
+          const needle = cmd.name.toLowerCase();
+          const match  = items.find((i) => i.name.toLowerCase().includes(needle));
+          if (match) dispatch(removeItem(match.id));
           setInputValue('');
           return;
         }
@@ -530,7 +537,7 @@ export default function Home() {
 
       setCommittedQuery(trimmed);
     },
-    [inputValue, debouncedCommit, clearBasket],
+    [inputValue, debouncedCommit, dispatch, items],
   );
 
   const throttledSuggestion = useRef(
@@ -580,17 +587,19 @@ export default function Home() {
     const pendingQuery = pendingAutoAddQueryRef.current;
     if (pendingQuery && data.results.length > 0) {
       const top = data.results[0];
-      addItem({
+      dispatch(addItem({
         id:        top.id,
         name:      top.nameHe ?? top.normalizedName,
         price:     top.price,
         storeName: top.storeName,
         storeId:   top.storeId,
         query:     pendingQuery,
-      });
+        storeLat:  top.storeLat,
+        storeLng:  top.storeLng,
+      }));
       pendingAutoAddQueryRef.current = null;
     }
-  }, [data, addItem]);
+  }, [data, dispatch]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const isNetworkError  = isError && error instanceof SearchError && error.isNetworkError;
@@ -681,7 +690,7 @@ export default function Home() {
             <div className="mt-3 flex items-center gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1 w-fit">
               <button
                 type="button"
-                onClick={() => setStrategy('near')}
+                onClick={() => dispatch(setStrategy('near'))}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   strategy === 'near'
                     ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
@@ -692,7 +701,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                onClick={() => setStrategy('cheap')}
+                onClick={() => dispatch(setStrategy('cheap'))}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   strategy === 'cheap'
                     ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
@@ -800,7 +809,9 @@ export default function Home() {
                       result={r}
                       searchQuery={committedQuery}
                       inBasket={hasItem(r.id)}
-                      onToggle={(item) => hasItem(r.id) ? removeItem(r.id) : addItem(item)}
+                      onToggle={(item) =>
+                        dispatch(hasItem(r.id) ? removeItem(r.id) : addItem(item))
+                      }
                     />
                   ))}
                 </ul>

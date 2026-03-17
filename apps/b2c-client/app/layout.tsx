@@ -35,6 +35,9 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  // viewportFit=cover enables env(safe-area-inset-bottom) so the floating
+  // basket bar clears the iPhone home indicator and Android gesture nav bar.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

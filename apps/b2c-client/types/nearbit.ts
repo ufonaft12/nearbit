@@ -128,4 +128,7 @@ export interface BasketItem {
   storeName: string;
   storeId:   string;
   query:     string;       // original search term that found this item
+  /** Store coordinates — enables exact Waze / Maps deep-links from the floating bar. */
+  storeLat?: number | null;
+  storeLng?: number | null;
 }

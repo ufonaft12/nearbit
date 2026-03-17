@@ -189,10 +189,15 @@ async function runItemSearch(item: string, limit: number): Promise<ItemSearchRes
 
 /**
  * Aggregate per-item search results into basket store options.
- * For each store, tracks the cheapest match for every basket item.
- * Sorts stores: most-complete basket first, then cheapest total.
+ *
+ * Sorting strategy:
+ *   'near'  — closest store first (distance from user), regardless of cost
+ *   'cheap' — most-complete basket first, then lowest total cost
  */
-function buildBasketResult(itemResults: ItemSearchResult[]): {
+function buildBasketResult(
+  itemResults: ItemSearchResult[],
+  opts: { strategy: 'near' | 'cheap'; userLat?: number | null; userLng?: number | null } = { strategy: 'cheap' },
+): {
   allProducts: ShapedProduct[];
   basket: BasketResult;
 } {
@@ -250,13 +255,32 @@ function buildBasketResult(itemResults: ItemSearchResult[]): {
     });
   }
 
-  // Rank: most items found first, then cheapest
-  storeOptions.sort((a, b) =>
-    b.itemsFound !== a.itemsFound
-      ? b.itemsFound - a.itemsFound
-      : a.totalCost - b.totalCost,
-  );
+  // ── Sort by strategy ────────────────────────────────────────────────────────
+  if (opts.strategy === 'near' && opts.userLat != null && opts.userLng != null) {
+    // Near Me: closest store first. A 200 m store ranks above a 5 km store
+    // even if it's slightly more expensive.
+    const { userLat, userLng } = opts;
+    storeOptions.sort((a, b) => {
+      const distA =
+        a.storeLat != null && a.storeLng != null
+          ? haversineKm(userLat, userLng, a.storeLat, a.storeLng)
+          : Infinity;
+      const distB =
+        b.storeLat != null && b.storeLng != null
+          ? haversineKm(userLat, userLng, b.storeLat, b.storeLng)
+          : Infinity;
+      return distA - distB;
+    });
+  } else {
+    // Lowest Price: most-complete basket first, then cheapest total
+    storeOptions.sort((a, b) =>
+      b.itemsFound !== a.itemsFound
+        ? b.itemsFound - a.itemsFound
+        : a.totalCost - b.totalCost,
+    );
+  }
 
+  // Savings = price spread among stores that carry the full basket
   const complete = storeOptions.filter((s) => s.itemsFound === totalItems);
   const savings  =
     complete.length >= 2
@@ -336,7 +360,10 @@ export async function GET(req: NextRequest) {
   // ── BASKET PIPELINE ──────────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
   if (isBasket) {
-    const perItemLimit = Math.max(3, Math.ceil(limit / basketItems!.length) + 2);
+    // For Near Me, request 3× more results per item so nearby stores are
+    // represented even if they rank lower by semantic similarity.
+    const basePerItem  = Math.max(3, Math.ceil(limit / basketItems!.length) + 2);
+    const perItemLimit = isNear ? Math.min(basePerItem * 3, 30) : basePerItem;
 
     let itemResults: ItemSearchResult[];
     try {
@@ -357,7 +384,11 @@ export async function GET(req: NextRequest) {
       }));
     }
 
-    const { allProducts, basket } = buildBasketResult(itemResults);
+    const { allProducts, basket } = buildBasketResult(itemResults, {
+      strategy: isNear ? 'near' : 'cheap',
+      userLat,
+      userLng,
+    });
 
     let answer: string;
     try {
@@ -417,11 +448,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to embed query' }, { status: 502 });
   }
 
-  // 2. Semantic search via RPC
+  // 2. Semantic search via RPC.
+  //    Near Me: request 3× the limit so nearby stores are represented even if
+  //    they rank lower by semantic similarity.  Cheap: standard count.
+  const dbLimit = isNear ? Math.min(limit * 3, 50) : limit;
   const rpcParams: Record<string, unknown> = {
     query_embedding: queryEmbedding,
     match_threshold: 0.25,
-    match_count: limit,
+    match_count:     dbLimit,
   };
 
   const { data: rows, error: rpcError } = storeFilter
@@ -439,52 +473,64 @@ export async function GET(req: NextRequest) {
   const storeIds = [...new Set(rawResults.map((r) => r.store_id))];
   const storeMap = await fetchStoreMap(storeIds);
 
-  // 4. Shape results
-  const results: (SearchResult & { storeName: string })[] = rawResults.map((r) => ({
-    id: r.id,
-    storeId: r.store_id,
-    storeName: storeMap.get(r.store_id)?.name ?? 'Unknown Store',
+  // 4. Shape into CachedResult (storeLat/storeLng included for distance calc)
+  let cachedResults: CachedResult[] = rawResults.map((r) => ({
+    id:             r.id,
+    storeId:        r.store_id,
+    storeName:      storeMap.get(r.store_id)?.name ?? 'Unknown Store',
     normalizedName: r.normalized_name,
-    nameHe:   r.name_he,
-    nameRu:   r.name_ru,
-    nameEn:   r.name_en,
-    category: r.category,
-    price:    r.price,
-    quantity: r.quantity,
-    unit:     r.unit,
-    barcode:  r.barcode,
-    similarity: r.similarity,
+    nameHe:         r.name_he,
+    nameRu:         r.name_ru,
+    nameEn:         r.name_en,
+    category:       r.category,
+    price:          r.price,
+    quantity:       r.quantity,
+    unit:           r.unit,
+    barcode:        r.barcode,
+    similarity:     r.similarity,
+    storeLat:       storeMap.get(r.store_id)?.lat  ?? null,
+    storeLng:       storeMap.get(r.store_id)?.lng  ?? null,
   }));
 
-  // 5. GPT-4o-mini answer
+  // 5. Near Me: filter to nearby stores then sort by distance ASC.
+  //    This must happen BEFORE the LLM answer so the AI describes the actual
+  //    results the client will see (not pre-filter data).
+  if (isNear) {
+    cachedResults = filterNear(cachedResults, userLat!, userLng!, maxDistanceKm);
+    // Sort by distance ascending — a 200 m store ranks above a 5 km store
+    cachedResults.sort((a, b) => {
+      const distA =
+        a.storeLat != null && a.storeLng != null
+          ? haversineKm(userLat!, userLng!, a.storeLat, a.storeLng)
+          : Infinity;
+      const distB =
+        b.storeLat != null && b.storeLng != null
+          ? haversineKm(userLat!, userLng!, b.storeLat, b.storeLng)
+          : Infinity;
+      return distA - distB;
+    });
+    cachedResults = cachedResults.slice(0, limit);
+  }
+
+  // 6. GPT-4o-mini answer — generated AFTER filtering so the AI describes the
+  //    exact result set the client will receive.
   let answer: string;
   try {
     answer = await generateSearchAnswer(
       query,
-      results.map((r) => ({
+      cachedResults.map((r) => ({
         normalizedName: r.normalizedName,
-        price:    r.price,
-        quantity: r.quantity,
-        unit:     r.unit,
-        storeName: r.storeName,
+        price:          r.price,
+        quantity:       r.quantity,
+        unit:           r.unit,
+        storeName:      r.storeName,
       })),
     );
   } catch (err) {
     console.error('[search] answer generation error', err);
-    answer = results.length > 0
-      ? `Found ${results.length} result(s) for "${query}".`
+    answer = cachedResults.length > 0
+      ? `Found ${cachedResults.length} result(s) for "${query}".`
       : `No results found for "${query}".`;
-  }
-
-  // 6. Shape results into CachedResult (with storeLat/storeLng) and optionally filter by distance
-  let cachedResults: CachedResult[] = results.map((r) => ({
-    ...r,
-    storeLat: storeMap.get(r.storeId)?.lat ?? null,
-    storeLng: storeMap.get(r.storeId)?.lng ?? null,
-  }));
-
-  if (isNear) {
-    cachedResults = filterNear(cachedResults, userLat!, userLng!, maxDistanceKm);
   }
 
   // 7. Write to Redis (TTL 24 h) — skipped for Near Me (location-dependent)
