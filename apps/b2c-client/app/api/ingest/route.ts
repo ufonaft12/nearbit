@@ -10,6 +10,13 @@ import {
 } from '@/lib/ai/openai';
 import type { NormalizedProduct } from '@/types/nearbit';
 
+// Allowed values match the DB CHECK constraint on products.unit
+const ALLOWED_UNITS = new Set(['kg', 'g', 'liter', 'ml', 'pcs', 'pack', 'other']);
+function sanitizeUnit(unit: string | undefined): string | null {
+  if (!unit) return null;
+  return ALLOWED_UNITS.has(unit) ? unit : 'other';
+}
+
 // ============================================================
 // POST /api/ingest
 //
@@ -74,10 +81,53 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. Normalize names via LLM
+  // 3. Compute sync hashes up front so we can skip unchanged products.
+  const hashByPosId = new Map<string, string>();
+  for (const raw of rawProducts) {
+    hashByPosId.set(
+      raw.id,
+      crypto.createHash('sha256').update(JSON.stringify(raw)).digest('hex')
+    );
+  }
+
+  // Fetch existing hashes for this store in one query.
+  const { data: existingRows } = await supabaseAdmin
+    .from('products')
+    .select('pos_item_id, sync_hash')
+    .eq('store_id', storeId)
+    .in('pos_item_id', rawProducts.map((p) => p.id));
+
+  const existingHashMap = new Map(
+    (existingRows ?? []).map((r: { pos_item_id: string; sync_hash: string | null }) => [
+      r.pos_item_id,
+      r.sync_hash,
+    ])
+  );
+
+  // Only run LLM + embedding on products whose payload actually changed.
+  const changedProducts = rawProducts.filter(
+    (p) => existingHashMap.get(p.id) !== hashByPosId.get(p.id)
+  );
+  const unchangedCount = rawProducts.length - changedProducts.length;
+  if (unchangedCount > 0) {
+    console.log(`[ingest] skipping ${unchangedCount} unchanged product(s)`);
+  }
+
+  // If nothing changed, return early.
+  if (changedProducts.length === 0) {
+    return NextResponse.json({
+      success: true,
+      store: { id: store.id, name: store.name },
+      processed: rawProducts.length,
+      upserted: 0,
+      skipped: unchangedCount,
+    });
+  }
+
+  // 4. Normalize names via LLM (only changed products)
   let normalized: NormalizedProduct[];
   try {
-    normalized = await normalizeProducts(rawProducts);
+    normalized = await normalizeProducts(changedProducts);
   } catch (err) {
     console.error('[ingest] normalization error', err);
     return NextResponse.json(
@@ -89,10 +139,9 @@ export async function POST(req: NextRequest) {
   // Build a lookup map for quick access
   const normalizedMap = new Map(normalized.map((n) => [n.posItemId, n]));
 
-  // 4. Generate embeddings for all products in one batch call.
-  // IMPORTANT: build texts in rawProducts order (not normalized order) so that
-  // embeddings[idx] aligns with rawProducts[idx] when constructing rows below.
-  const embeddingTexts = rawProducts.map((raw) => {
+  // 5. Generate embeddings for changed products only.
+  // IMPORTANT: build texts in changedProducts order so embeddings[idx] aligns below.
+  const embeddingTexts = changedProducts.map((raw) => {
     const norm = normalizedMap.get(raw.id);
     return norm ? buildEmbeddingText(norm) : raw.name;
   });
@@ -107,14 +156,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 5. Prepare upsert rows
-  const rows = rawProducts.map((raw, idx) => {
+  // 6. Prepare upsert rows (only changed products; hashes already computed above)
+  const rows = changedProducts.map((raw, idx) => {
     const norm = normalizedMap.get(raw.id);
-    const syncPayload = JSON.stringify(raw);
-    const syncHash = crypto
-      .createHash('sha256')
-      .update(syncPayload)
-      .digest('hex');
 
     return {
       store_id: storeId,
@@ -131,11 +175,11 @@ export async function POST(req: NextRequest) {
       category: norm?.category ?? null,
       price: raw.price,
       quantity: raw.quantity ?? null,
-      unit: norm?.unit ?? null,
+      unit: sanitizeUnit(norm?.unit),
       barcode: raw.barcode ?? null,
       // Embedding stored as a Postgres vector literal string
       embedding: `[${embeddings[idx].join(',')}]`,
-      sync_hash: syncHash,
+      sync_hash: hashByPosId.get(raw.id)!,
       last_synced_at: new Date().toISOString(),
       is_available: true,
     };
@@ -162,6 +206,7 @@ export async function POST(req: NextRequest) {
     store: { id: store.id, name: store.name },
     processed: rawProducts.length,
     upserted: count,
+    skipped: unchangedCount,
   });
 }
 

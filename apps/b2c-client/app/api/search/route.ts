@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const query = searchParams.get('q')?.trim();
   const storeFilter = searchParams.get('store') ?? undefined;
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '10', 10), 50);
+  const limit = Math.min(parseInt(searchParams.get('limit') ?? '10', 10) || 10, 50);
 
   if (!query) {
     return NextResponse.json(

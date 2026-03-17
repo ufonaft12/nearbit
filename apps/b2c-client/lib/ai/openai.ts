@@ -67,7 +67,9 @@ export async function generateEmbeddingsBatch(
 // Format: "<normalized_name> <category> <unit>"
 // ============================================================
 export function buildEmbeddingText(product: NormalizedProduct): string {
-  return [product.nameHe, product.nameEn, product.category, product.unit]
+  // Include all three language names so queries in Hebrew, Russian, or English
+  // all land near the same vector.
+  return [product.nameHe, product.nameRu, product.nameEn, product.category, product.unit]
     .filter(Boolean)
     .join(' ');
 }
@@ -175,7 +177,8 @@ export async function generateSearchAnswer(
       const price = r.price != null ? `${r.price} ₪` : 'מחיר לא זמין';
       const qty =
         r.quantity != null ? `${r.quantity} ${r.unit ?? ''}`.trim() : '';
-      return `${i + 1}. ${r.normalizedName} — ${price}${qty ? ` (${qty})` : ''}`;
+      const store = r.storeName ? ` at ${r.storeName}` : '';
+      return `${i + 1}. ${r.normalizedName} — ${price}${qty ? ` (${qty})` : ''}${store}`;
     })
     .join('\n');
 
