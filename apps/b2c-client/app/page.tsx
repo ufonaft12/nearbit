@@ -473,6 +473,9 @@ export default function Home() {
   // Ref used to auto-add the top result after an "Add X" voice command fires a search
   const pendingAutoAddQueryRef = useRef<string | null>(null);
 
+  // Visible "Adding [item]…" label shown in the floating bar during a silent add-search
+  const [pendingAddLabel, setPendingAddLabel] = useState<string | null>(null);
+
   const resultsAnchorRef = useRef<HTMLDivElement>(null);
 
   // ── Basket detection (client-side, mirrors server logic) ──────────────────
@@ -529,6 +532,7 @@ export default function Home() {
         }
         if (cmd.type === 'add') {
           pendingAutoAddQueryRef.current = cmd.query;
+          setPendingAddLabel(cmd.query);   // show "Adding [item]…" in floating bar
           setCommittedQuery(cmd.query);
           setInputValue(cmd.query);
           return;
@@ -599,7 +603,17 @@ export default function Home() {
       }));
       pendingAutoAddQueryRef.current = null;
     }
+    // Always clear the loading label when the search completes
+    setPendingAddLabel(null);
   }, [data, dispatch]);
+
+  // Clear pending-add label if the search failed (prevents spinner getting stuck)
+  useEffect(() => {
+    if (isError) {
+      pendingAutoAddQueryRef.current = null;
+      setPendingAddLabel(null);
+    }
+  }, [isError]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const isNetworkError  = isError && error instanceof SearchError && error.isNetworkError;
@@ -837,7 +851,7 @@ export default function Home() {
       </main>
 
       {/* Floating basket bar — renders when basket has items */}
-      <BasketFloatingBar />
+      <BasketFloatingBar pendingAddLabel={pendingAddLabel} />
     </div>
   );
 }
