@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { NormalizedProduct, PosProduct } from '@/types/nearbit';
+import type { NormalizedProduct, PosProduct, BasketResult } from '@/types/nearbit';
 
 // ============================================================
 // Nearbit – OpenAI Service Layer
@@ -153,10 +153,29 @@ export async function getQueryEmbedding(query: string): Promise<number[]> {
   return generateEmbedding(query);
 }
 
+// ── Shared persona prompt ────────────────────────────────────────────────────
+const PERSONA_PROMPT = `אתה "אחי הסבבה" — השכן הישראלי החכם שמכיר את כל המכולות בסביבה.
+You are the "Savvy Israeli Neighbor" for Nearbit — an Israeli local-store aggregator.
+
+PERSONALITY: warm, punchy, use light Israeli slang — אחי, סבבה, יאללה, ממש שווה, חבל — but stay clear and helpful.
+
+LANGUAGE RULES (critical):
+- Detect the language of the user's query.
+- Hebrew query  → respond in casual Israeli Hebrew with slang.
+- Russian query → respond in Russian; sprinkle "аchi" / "sababa" naturally.
+- English query → respond in friendly English; throw in one Hebrew/slang word naturally.
+- Mixed query (e.g. "cheapest mazlag?", "где купить חומוס?") → respond in a natural Israeli mix, just like a real neighbor would.
+- ALWAYS keep the Achi/Sababa persona regardless of language.
+
+SCARCITY RULE:
+- If ANY product in the list has quantity > 0 AND quantity < 5, you MUST warn: adapt "אחי, נשאר רק [qty] ב[Store], תמהר!" to the detected language.
+- If quantity = 0, clearly state it is out of stock.
+
+FORMAT: 2–4 sentences max.`;
+
 // ============================================================
 // generateSearchAnswer
-// Takes a user query + search results and produces a concise
-// natural-language answer (RAG final step).
+// Single-item query: produces a concise natural-language answer.
 // ============================================================
 export async function generateSearchAnswer(
   query: string,
@@ -175,10 +194,13 @@ export async function generateSearchAnswer(
   const productList = results
     .map((r, i) => {
       const price = r.price != null ? `${r.price} ₪` : 'מחיר לא זמין';
-      const qty =
-        r.quantity != null ? `${r.quantity} ${r.unit ?? ''}`.trim() : '';
+      const qty   = r.quantity != null ? `${r.quantity} ${r.unit ?? ''}`.trim() : '';
       const store = r.storeName ? ` at ${r.storeName}` : '';
-      return `${i + 1}. ${r.normalizedName} — ${price}${qty ? ` (${qty})` : ''}${store}`;
+      // Inline scarcity hint so the AI can trigger the SCARCITY RULE
+      const scarce = r.quantity != null && r.quantity > 0 && r.quantity < 5
+        ? ` ⚠️ only ${r.quantity} left`
+        : r.quantity === 0 ? ' [OUT OF STOCK]' : '';
+      return `${i + 1}. ${r.normalizedName} — ${price}${qty ? ` (${qty})` : ''}${store}${scarce}`;
     })
     .join('\n');
 
@@ -186,21 +208,61 @@ export async function generateSearchAnswer(
     model: CHAT_MODEL,
     temperature: 0.3,
     messages: [
-      {
-        role: 'system',
-        content: `אתה "אחי הסבבה" — השכן הישראלי שמכיר את כל המכולות בסביבה.
-You are the "Savvy Israeli Neighbor" shopping assistant for Nearbit, a local store aggregator.
-Personality: warm, informal, use light Israeli slang — אחי, סבבה, יאללה, ממש שווה, מה הסיפור — but stay helpful and clear.
-Rules:
-- Answer in the SAME language the user wrote (Hebrew → Hebrew slang, English → friendly English, Russian → Russian with warmth).
-- Always mention prices and which store has the item.
-- If something is a great deal, say so enthusiastically (e.g. "סבבה מחיר!" / "great price!").
-- If items are out of stock (quantity 0), flag it clearly.
-- Keep it short — 2-4 sentences max.`,
-      },
+      { role: 'system', content: PERSONA_PROMPT },
       {
         role: 'user',
         content: `User query: "${query}"\n\nFound products:\n${productList}\n\nProvide a helpful answer.`,
+      },
+    ],
+  });
+
+  return response.choices[0].message.content ?? '';
+}
+
+// ============================================================
+// generateBasketAnswer
+// Multi-item / basket query: compares stores and recommends
+// the best shopping destination for the full basket.
+// ============================================================
+export async function generateBasketAnswer(
+  query: string,
+  basket: BasketResult,
+): Promise<string> {
+  if (basket.storeOptions.length === 0) {
+    return 'לא נמצאו מוצרים עבור הרשימה שלך.';
+  }
+
+  const storeComparison = basket.storeOptions.slice(0, 3)
+    .map((s, i) => {
+      const completeness = s.itemsFound === s.totalItems
+        ? '✓ complete'
+        : `${s.itemsFound}/${s.totalItems} items`;
+      const itemsStr = s.items
+        .map((it) => `${it.productName} ₪${it.price.toFixed(2)}`)
+        .join(', ');
+      const badge = i === 0 ? '🏆 ' : '';
+      return `${badge}${s.storeName}: ₪${s.totalCost.toFixed(2)} (${completeness}) — ${itemsStr}`;
+    })
+    .join('\n');
+
+  const savingsHint = basket.savings > 0.5
+    ? `\nShopping at the best store saves ₪${basket.savings.toFixed(2)} vs the priciest option.`
+    : '';
+
+  const response = await openai.chat.completions.create({
+    model: CHAT_MODEL,
+    temperature: 0.3,
+    messages: [
+      {
+        role: 'system',
+        content: `${PERSONA_PROMPT}
+
+BASKET MODE: You are comparing full shopping baskets across stores.
+Clearly name the winning store and the saving amount. Be an excited deal-finder.`,
+      },
+      {
+        role: 'user',
+        content: `User basket: "${query}"\n\nStore comparison:\n${storeComparison}${savingsHint}\n\nGive a quick recommendation.`,
       },
     ],
   });
