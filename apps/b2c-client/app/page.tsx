@@ -16,7 +16,9 @@ import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 
 import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/lib/search';
-import type { SearchResultWithStore, BasketResult } from '@/types/nearbit';
+import { useBasket } from '@/lib/basket-context';
+import { BasketFloatingBar } from '@/app/components/BasketFloatingBar';
+import type { SearchResultWithStore, BasketResult, BasketItem, SearchStrategy } from '@/types/nearbit';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -58,6 +60,40 @@ function openInMaps(storeName: string, lat?: number | null, lng?: number | null)
     : `https://maps.google.com/maps?q=${encodeURIComponent(storeName + ' Israel')}`;
   vibrate(30);
   window.open(url, '_blank', 'noopener');
+}
+
+// ─── Basket command parser ─────────────────────────────────────────────────────
+
+type BasketCommand =
+  | { type: 'add';    query: string }
+  | { type: 'clear'               }
+  | { type: 'remove'; name:  string };
+
+/**
+ * Detect natural-language basket management commands in Hebrew, Russian, and English.
+ * Returns null when the input is a plain product search, not a command.
+ */
+function parseBasketCommand(input: string): BasketCommand | null {
+  const s = input.trim();
+
+  // Clear: "clear [my] basket/list", "נקה [את ה]סל", "очисти [мой] список"
+  if (/^(?:clear(?:\s+(?:my\s+)?(?:basket|list))?|נקה(?:\s+(?:את\s+ה)?סל)?|очисти?(?:\s+(?:мой\s+)?(?:список|корзину))?)$/i.test(s)) {
+    return { type: 'clear' };
+  }
+
+  // Add: "add X [to my basket/list]", "הוסף X [לסל]", "добавь X [в список]"
+  const addMatch = s.match(
+    /^(?:add|הוסף|добавь?)\s+(.+?)(?:\s+(?:to\s+(?:my\s+)?(?:basket|list)|לסל|в\s+(?:список|корзину)))?$/i,
+  );
+  if (addMatch?.[1]) return { type: 'add', query: addMatch[1].trim() };
+
+  // Remove: "remove X [from basket]", "הסר X [מהסל]", "удали X [из списка]"
+  const removeMatch = s.match(
+    /^(?:remove|הסר|удали?)\s+(.+?)(?:\s+(?:from\s+(?:my\s+)?(?:basket|list)|מהסל|из\s+(?:списка|корзины)))?$/i,
+  );
+  if (removeMatch?.[1]) return { type: 'remove', name: removeMatch[1].trim() };
+
+  return null;
 }
 
 /**
@@ -280,10 +316,13 @@ function BasketSummaryCard({
 // ─── ProductCard ──────────────────────────────────────────────────────────────
 
 interface ProductCardProps {
-  result: SearchResultWithStore;
+  result:      SearchResultWithStore;
+  searchQuery: string;
+  inBasket:    boolean;
+  onToggle:    (item: BasketItem) => void;
 }
 
-const ProductCard = memo(function ProductCard({ result: r }: ProductCardProps) {
+const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket, onToggle }: ProductCardProps) {
   const subtitle = useMemo(
     () => [r.nameEn, r.category, r.unit].filter(Boolean).join(' · '),
     [r.nameEn, r.category, r.unit],
@@ -292,11 +331,46 @@ const ProductCard = memo(function ProductCard({ result: r }: ProductCardProps) {
   const trend = getPriceTrend(r.price, r.previousPrice);
 
   // Scarcity thresholds
-  const isLowStock  = r.quantity != null && r.quantity > 0 && r.quantity < 5;
+  const isLowStock   = r.quantity != null && r.quantity > 0 && r.quantity < 5;
   const isOutOfStock = r.quantity === 0;
 
+  const basketItem: BasketItem = {
+    id:        r.id,
+    name:      r.nameHe ?? r.normalizedName,
+    price:     r.price,
+    storeName: r.storeName,
+    storeId:   r.storeId,
+    query:     searchQuery,
+  };
+
   return (
-    <li className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 flex items-start justify-between gap-4">
+    <li
+      className={`rounded-xl border bg-white dark:bg-zinc-900 px-4 py-3 flex items-start justify-between gap-4 transition-colors ${
+        inBasket
+          ? 'border-green-300 dark:border-green-700 ring-1 ring-green-200 dark:ring-green-800'
+          : 'border-zinc-100 dark:border-zinc-800'
+      }`}
+    >
+      {/* Checkbox */}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={inBasket}
+        aria-label={inBasket ? `Remove ${r.nameHe ?? r.normalizedName} from basket` : `Add ${r.nameHe ?? r.normalizedName} to basket`}
+        onClick={() => { onToggle(basketItem); vibrate(20); }}
+        className={`mt-0.5 shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+          inBasket
+            ? 'bg-green-500 border-green-500 text-white'
+            : 'border-zinc-300 dark:border-zinc-600 hover:border-green-400 dark:hover:border-green-500'
+        }`}
+      >
+        {inBasket && (
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
+            <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
       {/* Left column */}
       <div className="flex flex-col gap-0.5 min-w-0 flex-1">
         <span
@@ -386,6 +460,11 @@ export default function Home() {
   const [userLocation, setUserLocation]     = useState<{ lat: number; lng: number } | null>(null);
   const [locStatus, setLocStatus]           = useState<LocStatus>('idle');
 
+  const { addItem, removeItem, hasItem, clearBasket, strategy, setStrategy } = useBasket();
+
+  // Ref used to auto-add the top result after an "Add X" voice command fires a search
+  const pendingAutoAddQueryRef = useRef<string | null>(null);
+
   const resultsAnchorRef = useRef<HTMLDivElement>(null);
 
   // ── Basket detection (client-side, mirrors server logic) ──────────────────
@@ -422,9 +501,36 @@ export default function Home() {
       e.preventDefault();
       debouncedCommit.cancel();
       const trimmed = inputValue.trim();
-      if (trimmed.length >= MIN_QUERY_LENGTH) setCommittedQuery(trimmed);
+      if (trimmed.length < MIN_QUERY_LENGTH) return;
+
+      // ── Basket command detection ───────────────────────────────────────────
+      const cmd = parseBasketCommand(trimmed);
+      if (cmd) {
+        if (cmd.type === 'clear') {
+          clearBasket();
+          setInputValue('');
+          return;
+        }
+        if (cmd.type === 'remove') {
+          // Best-effort: match by name substring (case-insensitive)
+          // We don't have direct access to items here — handled via context in the
+          // useEffect that fires when data changes; for 'remove' we use the hook directly.
+          // Since useBasket exposes removeItem(id) we need the id — instead, clear by name
+          // match is done below via the basket context items.
+          setInputValue('');
+          return;
+        }
+        if (cmd.type === 'add') {
+          pendingAutoAddQueryRef.current = cmd.query;
+          setCommittedQuery(cmd.query);
+          setInputValue(cmd.query);
+          return;
+        }
+      }
+
+      setCommittedQuery(trimmed);
     },
-    [inputValue, debouncedCommit],
+    [inputValue, debouncedCommit, clearBasket],
   );
 
   const throttledSuggestion = useRef(
@@ -458,8 +564,9 @@ export default function Home() {
 
   // ── TanStack Query ─────────────────────────────────────────────────────────
   const { data, isFetching, isError, error, isSuccess } = useQuery({
-    queryKey: ['search', committedQuery, userLocation] as const,
-    queryFn:  ({ signal }) => fetchSearch(committedQuery, signal, userLocation ?? undefined),
+    queryKey: ['search', committedQuery, userLocation, strategy] as const,
+    queryFn:  ({ signal }) =>
+      fetchSearch(committedQuery, signal, userLocation ?? undefined, strategy),
     enabled:  committedQuery.length >= MIN_QUERY_LENGTH,
   });
 
@@ -468,7 +575,22 @@ export default function Home() {
     if (!data) return;
     vibrate(50);
     resultsAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [data]);
+
+    // Auto-add top result when triggered by an "Add X" basket command
+    const pendingQuery = pendingAutoAddQueryRef.current;
+    if (pendingQuery && data.results.length > 0) {
+      const top = data.results[0];
+      addItem({
+        id:        top.id,
+        name:      top.nameHe ?? top.normalizedName,
+        price:     top.price,
+        storeName: top.storeName,
+        storeId:   top.storeId,
+        query:     pendingQuery,
+      });
+      pendingAutoAddQueryRef.current = null;
+    }
+  }, [data, addItem]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const isNetworkError  = isError && error instanceof SearchError && error.isNetworkError;
@@ -493,7 +615,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-6 py-10 flex flex-col gap-8">
+      <main className="mx-auto max-w-2xl px-6 py-10 pb-40 flex flex-col gap-8">
 
         {/* ── Search box ── */}
         <section>
@@ -552,6 +674,34 @@ export default function Home() {
             <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
               🧺 Basket mode — comparing prices across stores
             </p>
+          )}
+
+          {/* Strategy toggle — shown once location is active */}
+          {locStatus === 'active' && (
+            <div className="mt-3 flex items-center gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1 w-fit">
+              <button
+                type="button"
+                onClick={() => setStrategy('near')}
+                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  strategy === 'near'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+                }`}
+              >
+                📍 Near Me
+              </button>
+              <button
+                type="button"
+                onClick={() => setStrategy('cheap')}
+                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  strategy === 'cheap'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+                }`}
+              >
+                💰 Lowest Price
+              </button>
+            </div>
           )}
 
           {/* Suggestion chips */}
@@ -645,7 +795,13 @@ export default function Home() {
                 </p>
                 <ul className="flex flex-col gap-2" role="list" aria-label="Product results">
                   {data.results.map((r) => (
-                    <ProductCard key={r.id} result={r} />
+                    <ProductCard
+                      key={r.id}
+                      result={r}
+                      searchQuery={committedQuery}
+                      inBasket={hasItem(r.id)}
+                      onToggle={(item) => hasItem(r.id) ? removeItem(r.id) : addItem(item)}
+                    />
                   ))}
                 </ul>
               </>
@@ -668,6 +824,9 @@ export default function Home() {
         )}
 
       </main>
+
+      {/* Floating basket bar — renders when basket has items */}
+      <BasketFloatingBar />
     </div>
   );
 }

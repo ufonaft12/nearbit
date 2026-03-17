@@ -114,3 +114,18 @@ export interface CachedSearchPayload {
   results: CachedResult[];
   basket?: BasketResult;  // location-independent → safe to cache as-is
 }
+
+// ------ Smart Basket (Phase 5) ------
+
+/** Determines whether search prioritises proximity or lowest price city-wide. */
+export type SearchStrategy = 'near' | 'cheap';
+
+/** A product the user has checked / added to their interactive basket. */
+export interface BasketItem {
+  id:        string;
+  name:      string;       // display name (nameHe ?? normalizedName)
+  price:     number | null;
+  storeName: string;
+  storeId:   string;
+  query:     string;       // original search term that found this item
+}

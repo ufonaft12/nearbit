@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
+import { BasketProvider } from '@/lib/basket-context';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // useState ensures one QueryClient per component tree, not a module singleton,
@@ -28,7 +29,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
                                   when switching themes
     */
     <ThemeProvider attribute="class" defaultTheme="system" disableTransitionOnChange>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <BasketProvider>{children}</BasketProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }

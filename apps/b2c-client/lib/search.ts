@@ -5,7 +5,7 @@
 // and reused by any future component.
 // ============================================================
 
-import type { SearchResponse } from '@/types/nearbit';
+import type { SearchResponse, SearchStrategy } from '@/types/nearbit';
 
 export const MIN_QUERY_LENGTH = 2;
 export const MAX_QUERY_LENGTH = 500;
@@ -42,6 +42,8 @@ export async function fetchSearch(
   query: string,
   signal?: AbortSignal,
   location?: { lat: number; lng: number },
+  strategy?: SearchStrategy,
+  maxDistanceKm?: number,
 ): Promise<SearchResponse> {
   // Clamp to max length as a safety net (API route also validates).
   const q = query.trim().slice(0, MAX_QUERY_LENGTH);
@@ -51,6 +53,8 @@ export async function fetchSearch(
     params.set('user_lat', String(location.lat));
     params.set('user_lng', String(location.lng));
   }
+  if (strategy) params.set('strategy', strategy);
+  if (maxDistanceKm != null) params.set('max_distance_km', String(maxDistanceKm));
 
   let res: Response;
   try {

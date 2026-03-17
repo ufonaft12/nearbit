@@ -71,6 +71,32 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+/** Filter cached results to stores within maxKm of the user (Near Me strategy). */
+function filterNear(
+  results: CachedResult[],
+  userLat: number,
+  userLng: number,
+  maxKm: number,
+): CachedResult[] {
+  return results.filter((r) => {
+    if (r.storeLat == null || r.storeLng == null) return false;
+    return haversineKm(userLat, userLng, r.storeLat, r.storeLng) <= maxKm;
+  });
+}
+
+/** Filter ShapedProducts to stores within maxKm of the user (Near Me strategy). */
+function filterNearProducts(
+  products: ShapedProduct[],
+  userLat: number,
+  userLng: number,
+  maxKm: number,
+): ShapedProduct[] {
+  return products.filter((p) => {
+    if (p.storeLat == null || p.storeLng == null) return false;
+    return haversineKm(userLat, userLng, p.storeLat, p.storeLng) <= maxKm;
+  });
+}
+
 /** Convert CachedResult[] → SearchResultWithStore[], attaching per-user distances
  *  and passing storeLat/storeLng through to the client for directions links. */
 function withDistances(
@@ -252,15 +278,29 @@ function buildBasketResult(itemResults: ItemSearchResult[]): {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const query       = searchParams.get('q')?.trim();
-  const storeFilter = searchParams.get('store') ?? undefined;
-  const limit       = Math.min(parseInt(searchParams.get('limit') ?? '10', 10) || 10, 50);
-  const userLat     = searchParams.get('user_lat') ? parseFloat(searchParams.get('user_lat')!) : null;
-  const userLng     = searchParams.get('user_lng') ? parseFloat(searchParams.get('user_lng')!) : null;
+  const query         = searchParams.get('q')?.trim();
+  const storeFilter   = searchParams.get('store') ?? undefined;
+  const limit         = Math.min(parseInt(searchParams.get('limit') ?? '10', 10) || 10, 50);
+  const userLat       = searchParams.get('user_lat') ? parseFloat(searchParams.get('user_lat')!) : null;
+  const userLng       = searchParams.get('user_lng') ? parseFloat(searchParams.get('user_lng')!) : null;
+  const strategy      = searchParams.get('strategy') === 'near' ? 'near' : 'cheap';
+  const maxDistanceKm = searchParams.get('max_distance_km')
+    ? parseFloat(searchParams.get('max_distance_km')!)
+    : 1.5;
 
   if (!query) {
     return NextResponse.json({ error: 'Missing required param: q' }, { status: 400 });
   }
+
+  // Near Me requires coordinates
+  if (strategy === 'near' && (userLat == null || userLng == null)) {
+    return NextResponse.json(
+      { error: 'Near Me strategy requires user_lat and user_lng' },
+      { status: 400 },
+    );
+  }
+
+  const isNear = strategy === 'near';
 
   // ── Basket detection ──────────────────────────────────────────────────────
   const basketItems = parseBasketItems(query);
@@ -268,14 +308,15 @@ export async function GET(req: NextRequest) {
 
   // ── Cache key ─────────────────────────────────────────────────────────────
   // Basket key: sort items alphabetically so "milk, eggs" and "eggs, milk" share cache.
+  // Near Me results are location-dependent — never cache them.
   const cacheKey = isBasket
     ? `search:cache:basket:${createHash('sha256')
         .update([...basketItems!].sort().join('|').toLowerCase())
         .digest('hex')}`
     : `search:cache:${createHash('sha256').update(query.toLowerCase()).digest('hex')}`;
 
-  // ── 0. Redis cache check ──────────────────────────────────────────────────
-  if (redis) {
+  // ── 0. Redis cache check (skipped for Near Me — results are location-dependent) ──
+  if (redis && !isNear) {
     try {
       const cached = await redis.get<CachedSearchPayload>(cacheKey);
       if (cached) {
@@ -308,6 +349,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Basket search failed' }, { status: 502 });
     }
 
+    // For Near Me, filter each item's products to nearby stores before aggregating
+    if (isNear) {
+      itemResults = itemResults.map((ir) => ({
+        ...ir,
+        products: filterNearProducts(ir.products, userLat!, userLng!, maxDistanceKm),
+      }));
+    }
+
     const { allProducts, basket } = buildBasketResult(itemResults);
 
     let answer: string;
@@ -338,7 +387,7 @@ export async function GET(req: NextRequest) {
       storeLng: p.storeLng,
     }));
 
-    if (redis) {
+    if (redis && !isNear) {
       redis
         .set<CachedSearchPayload>(
           cacheKey,
@@ -427,14 +476,19 @@ export async function GET(req: NextRequest) {
       : `No results found for "${query}".`;
   }
 
-  // 6. Write to Redis (TTL 24 h)
-  const cachedResults: CachedResult[] = results.map((r) => ({
+  // 6. Shape results into CachedResult (with storeLat/storeLng) and optionally filter by distance
+  let cachedResults: CachedResult[] = results.map((r) => ({
     ...r,
     storeLat: storeMap.get(r.storeId)?.lat ?? null,
     storeLng: storeMap.get(r.storeId)?.lng ?? null,
   }));
 
-  if (redis) {
+  if (isNear) {
+    cachedResults = filterNear(cachedResults, userLat!, userLng!, maxDistanceKm);
+  }
+
+  // 7. Write to Redis (TTL 24 h) — skipped for Near Me (location-dependent)
+  if (redis && !isNear) {
     redis
       .set<CachedSearchPayload>(cacheKey, { answer, results: cachedResults }, { ex: CACHE_TTL_SECONDS })
       .catch((err) => console.warn('[search] Redis write error', err));
