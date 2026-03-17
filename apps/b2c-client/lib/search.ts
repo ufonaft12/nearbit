@@ -28,7 +28,8 @@ export class SearchError extends Error {
 }
 
 /**
- * Calls GET /api/search?q=<query> and returns the typed response.
+ * Calls GET /api/search?q=<query>[&user_lat=<lat>&user_lng=<lng>]
+ * and returns the typed response.
  *
  * Throws SearchError on:
  *  - network / connectivity failure (isNetworkError = true)
@@ -40,13 +41,20 @@ export class SearchError extends Error {
 export async function fetchSearch(
   query: string,
   signal?: AbortSignal,
+  location?: { lat: number; lng: number },
 ): Promise<SearchResponse> {
   // Clamp to max length as a safety net (API route also validates).
   const q = query.trim().slice(0, MAX_QUERY_LENGTH);
 
+  const params = new URLSearchParams({ q });
+  if (location) {
+    params.set('user_lat', String(location.lat));
+    params.set('user_lng', String(location.lng));
+  }
+
   let res: Response;
   try {
-    res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal });
+    res = await fetch(`/api/search?${params.toString()}`, { signal });
   } catch (err) {
     // DOMException with name 'AbortError' means TanStack cancelled this query
     // because a newer one started — re-throw so TanStack handles it correctly.

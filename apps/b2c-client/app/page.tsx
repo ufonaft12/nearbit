@@ -11,7 +11,8 @@ import {
   type ChangeEvent,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { debounce, throttle } from 'lodash';
+import debounce from 'lodash/debounce';
+import throttle from 'lodash/throttle';
 
 import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/lib/search';
 import type { SearchResultWithStore } from '@/types/nearbit';
@@ -23,17 +24,12 @@ const THROTTLE_MS  = 800;  // suggestion chip min interval
 const SUGGESTIONS  = ['חומוס', 'חלב', 'לחם', 'ביצים', 'שוקולד', 'במבה'] as const;
 
 // ─── ProductCard ──────────────────────────────────────────────────────────────
-// Extracted + memoised: won't re-render when the parent re-renders due to
-// inputValue changes during typing. Only re-renders if this specific result
-// object is replaced (reference inequality from a new fetch).
 
 interface ProductCardProps {
   result: SearchResultWithStore;
 }
 
 const ProductCard = memo(function ProductCard({ result: r }: ProductCardProps) {
-  // useMemo: subtitle string is a non-trivial filter+join; skip recomputation
-  // on any parent render that doesn't change this card's props.
   const subtitle = useMemo(
     () => [r.nameEn, r.category, r.unit].filter(Boolean).join(' · '),
     [r.nameEn, r.category, r.unit],
@@ -63,6 +59,9 @@ const ProductCard = memo(function ProductCard({ result: r }: ProductCardProps) {
             ₪{r.price.toFixed(2)}
           </span>
         )}
+        {r.distanceKm != null && (
+          <span className="text-xs text-zinc-400">{r.distanceKm} km</span>
+        )}
         <span className="text-[11px] text-zinc-400">
           {(r.similarity * 100).toFixed(0)}% match
         </span>
@@ -73,18 +72,20 @@ const ProductCard = memo(function ProductCard({ result: r }: ProductCardProps) {
 
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
+type LocStatus = 'idle' | 'requesting' | 'active' | 'denied';
+
 export default function Home() {
   // inputValue  — the live value shown in the <input> (updates on every keystroke)
   // committedQuery — debounced snapshot that drives the TanStack Query key
   //                  (only changes 400 ms after the last keystroke, or on submit)
-  const [inputValue, setInputValue]       = useState('');
+  const [inputValue, setInputValue]         = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
 
+  // User geolocation — passed to the search API when available
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locStatus, setLocStatus]       = useState<LocStatus>('idle');
+
   // ── Debounce ───────────────────────────────────────────────────────────────
-  // useRef keeps the same debounced function instance across renders so its
-  // internal timer is never reset by a re-render. Lodash debounce is used
-  // explicitly (not a useEffect timer) because it provides .cancel() and
-  // .flush() which we need for the immediate-submit path.
   const debouncedCommit = useRef(
     debounce((value: string) => {
       const trimmed = value.trim();
@@ -94,14 +95,11 @@ export default function Home() {
     }, DEBOUNCE_MS),
   ).current;
 
-  // Cancel any pending debounce on unmount to prevent state updates on an
-  // unmounted component (relevant in React Strict Mode double-invocation).
   useEffect(() => () => debouncedCommit.cancel(), [debouncedCommit]);
 
   // ── Input handler ──────────────────────────────────────────────────────────
   const handleInputChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
-      // Hard-clamp at MAX_QUERY_LENGTH so oversized pastes can't reach the API.
       const value = e.target.value.slice(0, MAX_QUERY_LENGTH);
       setInputValue(value);
       debouncedCommit(value);
@@ -110,11 +108,10 @@ export default function Home() {
   );
 
   // ── Form submit ────────────────────────────────────────────────────────────
-  // Bypasses the debounce timer — commit immediately on Enter / button click.
   const handleSubmit = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
-      debouncedCommit.cancel(); // drop pending debounce so we don't double-fire
+      debouncedCommit.cancel();
       const trimmed = inputValue.trim();
       if (trimmed.length >= MIN_QUERY_LENGTH) {
         setCommittedQuery(trimmed);
@@ -124,13 +121,11 @@ export default function Home() {
   );
 
   // ── Suggestion chips ───────────────────────────────────────────────────────
-  // Throttle: rapid-clicking a chip only triggers one search per THROTTLE_MS.
-  // `trailing: false` — first click wins; ignore clicks until cooldown ends.
   const throttledSuggestion = useRef(
     throttle(
       (s: string) => {
         setInputValue(s);
-        setCommittedQuery(s); // suggestions are always >= MIN_QUERY_LENGTH
+        setCommittedQuery(s);
       },
       THROTTLE_MS,
       { trailing: false },
@@ -139,29 +134,43 @@ export default function Home() {
 
   const handleSuggestion = useCallback(
     (s: string) => {
-      debouncedCommit.cancel(); // don't let a pending debounce overwrite the chip
+      debouncedCommit.cancel();
       throttledSuggestion(s);
     },
     [debouncedCommit, throttledSuggestion],
   );
 
+  // ── Geolocation ───────────────────────────────────────────────────────────
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocStatus('denied');
+      return;
+    }
+    setLocStatus('requesting');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocStatus('active');
+      },
+      () => setLocStatus('denied'),
+      { timeout: 10_000 },
+    );
+  }, []);
+
   // ── TanStack Query ─────────────────────────────────────────────────────────
-  // queryKey includes committedQuery so each unique search term gets its own
-  // cache entry. Re-searching "חומוס" is served instantly from cache (5 min
-  // staleTime set in QueryClient).
+  // queryKey includes userLocation so that gaining location triggers a re-fetch
+  // with distances, while the previous (no-location) result stays in cache.
   const { data, isFetching, isError, error, isSuccess } = useQuery({
-    queryKey: ['search', committedQuery] as const,
-    queryFn: ({ signal }) => fetchSearch(committedQuery, signal),
-    // Only fire when there's a meaningful query. The AbortSignal from TanStack
-    // cancels the fetch automatically if committedQuery changes mid-flight.
+    queryKey: ['search', committedQuery, userLocation] as const,
+    queryFn: ({ signal }) => fetchSearch(committedQuery, signal, userLocation ?? undefined),
     enabled: committedQuery.length >= MIN_QUERY_LENGTH,
   });
 
   // ── Derived state ──────────────────────────────────────────────────────────
-  const isNetworkError = isError && error instanceof SearchError && error.isNetworkError;
-  const hasResults     = isSuccess && data.results.length > 0;
+  const isNetworkError  = isError && error instanceof SearchError && error.isNetworkError;
+  const hasResults      = isSuccess && data.results.length > 0;
   const showInitialHint = !isFetching && !isSuccess && !isError;
-  const nearLimit      = inputValue.length > MAX_QUERY_LENGTH * 0.8;
+  const nearLimit       = inputValue.length > MAX_QUERY_LENGTH * 0.8;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -202,9 +211,30 @@ export default function Home() {
             >
               {isFetching ? '...' : 'Search'}
             </button>
+
+            {/* Location button */}
+            <button
+              type="button"
+              onClick={requestLocation}
+              disabled={locStatus === 'requesting' || locStatus === 'denied'}
+              title={
+                locStatus === 'active'   ? 'Location active'  :
+                locStatus === 'denied'   ? 'Location denied'  :
+                locStatus === 'requesting' ? 'Requesting…'    :
+                'Share my location for distances'
+              }
+              aria-label="Share location"
+              className={`rounded-xl border px-3 py-3 text-lg transition-colors disabled:opacity-40
+                ${locStatus === 'active'
+                  ? 'border-green-400 text-green-500 bg-green-50 dark:bg-green-950/30'
+                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                }`}
+            >
+              {locStatus === 'requesting' ? '⏳' : locStatus === 'denied' ? '🚫' : '📍'}
+            </button>
           </form>
 
-          {/* Character counter — only visible when approaching the 500-char limit */}
+          {/* Character counter */}
           {nearLimit && (
             <p className="mt-1 text-right text-xs text-zinc-400">
               {inputValue.length} / {MAX_QUERY_LENGTH}

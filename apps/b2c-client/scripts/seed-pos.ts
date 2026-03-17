@@ -44,6 +44,9 @@ const DEMO_STORE = {
   pos_provider: 'manual' as const,
   pos_store_id: 'demo-001',
   is_active: true,
+  // Herzl St 12, Tel Aviv (WGS-84)
+  lat: 32.0650,
+  lng: 34.7748,
 };
 
 // ---- 18 common Israeli grocery items ----
