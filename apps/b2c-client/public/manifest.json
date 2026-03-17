@@ -1,0 +1,37 @@
+{
+  "name": "Nearbit – Local Store Search",
+  "short_name": "Nearbit",
+  "description": "Search products across local Israeli grocery stores in Hebrew, Russian, or English.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fafafa",
+  "theme_color": "#18181b",
+  "lang": "he",
+  "dir": "rtl",
+  "categories": ["shopping", "food"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Search חומוס",
+      "short_name": "חומוס",
+      "description": "Quick-search for hummus",
+      "url": "/?q=%D7%97%D7%95%D7%9E%D7%95%D7%A1",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
+    }
+  ]
+}

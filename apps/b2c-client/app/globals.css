@@ -1,9 +1,31 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Switch Tailwind's dark variant from the default @media query to
+  class-based (.dark on <html>) so next-themes can drive it.
+  next-themes reads prefers-color-scheme and toggles the class itself.
+*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Shimmer skeleton animation ────────────────────────────────────────────── */
+
+@keyframes shimmer {
+  0%   { background-position: -800px 0; }
+  100% { background-position:  800px 0; }
 }
+
+@utility shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--shimmer-base)  25%,
+    var(--shimmer-hi)    50%,
+    var(--shimmer-base)  75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* ── Design tokens ──────────────────────────────────────────────────────────── */
 
 @theme inline {
   --color-background: var(--background);
@@ -12,11 +34,19 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --background:    #ffffff;
+  --foreground:    #171717;
+  --shimmer-base:  #e5e7eb;
+  --shimmer-hi:    #f9fafb;
+}
+
+/* Applied by next-themes when system/user preference is dark */
+.dark {
+  --background:    #0a0a0a;
+  --foreground:    #ededed;
+  --shimmer-base:  #27272a;
+  --shimmer-hi:    #3f3f46;
 }
 
 body {

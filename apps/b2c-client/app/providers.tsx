@@ -1,6 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -11,17 +12,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Search results don't change under our feet — 5 min stale time means
-            // re-searching the same term is instant (served from cache).
             staleTime: 1000 * 60 * 5,
-            // One retry is enough; a failing embedding call won't fix itself on retry.
             retry: 1,
-            // Don't re-fetch when the window is re-focused — no background polling needed.
             refetchOnWindowFocus: false,
           },
         },
       })
   );
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    /*
+      attribute="class"  — next-themes adds/removes the "dark" class on <html>
+      defaultTheme="system" — respect the OS preference on first load
+      disableTransitionOnChange — prevents a flash of unstyled transitions
+                                  when switching themes
+    */
+    <ThemeProvider attribute="class" defaultTheme="system" disableTransitionOnChange>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </ThemeProvider>
+  );
 }

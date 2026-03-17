@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -16,6 +16,25 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Nearbit – Local Store Search",
   description: "Search products across local Israeli grocery stores in Hebrew, Russian, or English.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Nearbit",
+  },
+  icons: {
+    apple: "/icons/icon.svg",
+  },
+};
+
+// theme-color follows the user's current color scheme preference
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)",  color: "#18181b" },
+  ],
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -24,7 +43,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="he">
+    // suppressHydrationWarning: next-themes modifies the class attribute
+    // after hydration to apply the correct theme; React would otherwise warn
+    // about a server/client mismatch on this element.
+    <html lang="he" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

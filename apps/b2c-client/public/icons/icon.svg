@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rounded square background — zinc-900 (#18181b) -->
+  <rect width="512" height="512" rx="88" fill="#18181b"/>
+  <!-- "N" lettermark -->
+  <path
+    d="M128 128 h64 l160 220 V128 h64 V384 h-64 L192 164 V384 h-64 Z"
+    fill="#ffffff"
+  />
+  <!-- Dot accent — green-500 (#22c55e) -->
+  <circle cx="380" cy="148" r="28" fill="#22c55e"/>
+</svg>
