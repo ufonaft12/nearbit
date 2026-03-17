@@ -89,8 +89,13 @@ export async function POST(req: NextRequest) {
   // Build a lookup map for quick access
   const normalizedMap = new Map(normalized.map((n) => [n.posItemId, n]));
 
-  // 4. Generate embeddings for all products in one batch call
-  const embeddingTexts = normalized.map(buildEmbeddingText);
+  // 4. Generate embeddings for all products in one batch call.
+  // IMPORTANT: build texts in rawProducts order (not normalized order) so that
+  // embeddings[idx] aligns with rawProducts[idx] when constructing rows below.
+  const embeddingTexts = rawProducts.map((raw) => {
+    const norm = normalizedMap.get(raw.id);
+    return norm ? buildEmbeddingText(norm) : raw.name;
+  });
   let embeddings: number[][];
   try {
     embeddings = await generateEmbeddingsBatch(embeddingTexts);

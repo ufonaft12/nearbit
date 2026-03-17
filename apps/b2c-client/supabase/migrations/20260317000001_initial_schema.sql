@@ -207,3 +207,58 @@ $$;
 
 comment on function public.search_products is
   'Semantic nearest-neighbor search over product embeddings using cosine distance. Pass store_id_filter to restrict to a single store.';
+
+-- ============================================================
+-- MATCH_PRODUCTS
+-- Supabase RPC-convention alias for client-side usage:
+--   supabase.rpc('match_products', { query_embedding, match_threshold, match_count })
+-- Simpler signature (no store filter) for use from the JS client.
+-- For server-side filtered search use search_products() above.
+-- ============================================================
+create or replace function public.match_products(
+  query_embedding  vector(1536),
+  match_threshold  float   default 0.3,
+  match_count      int     default 20
+)
+returns table (
+  id              uuid,
+  store_id        uuid,
+  normalized_name text,
+  name_he         text,
+  name_ru         text,
+  name_en         text,
+  category        text,
+  price           numeric,
+  quantity        numeric,
+  unit            text,
+  barcode         text,
+  similarity      float
+)
+language sql stable
+as $$
+  select
+    p.id,
+    p.store_id,
+    p.normalized_name,
+    p.name_he,
+    p.name_ru,
+    p.name_en,
+    p.category,
+    p.price,
+    p.quantity,
+    p.unit,
+    p.barcode,
+    1 - (p.embedding <=> query_embedding) as similarity
+  from public.products p
+  join public.stores s on s.id = p.store_id
+  where
+    p.is_available = true
+    and s.is_active = true
+    and p.embedding is not null
+    and 1 - (p.embedding <=> query_embedding) > match_threshold
+  order by p.embedding <=> query_embedding
+  limit match_count;
+$$;
+
+comment on function public.match_products is
+  'Supabase RPC-compatible cosine similarity search. Use from the JS client via supabase.rpc(''match_products'', {...}). For store-scoped queries use search_products().';
