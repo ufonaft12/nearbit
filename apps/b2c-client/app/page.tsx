@@ -6,23 +6,20 @@ import {
   useEffect,
   useCallback,
   useMemo,
-  memo,
   type FormEvent,
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useTheme } from 'next-themes';
 import { useTranslations } from 'next-intl';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 
 import {
-  Sun, Moon, Mic, MicOff,
+  Mic, MicOff,
   MapPin, MapPinOff, Loader2,
-  Navigation, Map as MapIcon,
   Search as SearchIcon, Coins, ShoppingBasket,
-  Trophy, AlertTriangle,
+  AlertTriangle,
 } from 'lucide-react';
 
 import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/lib/search';
@@ -32,485 +29,24 @@ import { addItem, removeItem, clearBasket, setStrategy } from '@/lib/store/baske
 import { useLocale } from '@/app/providers';
 import { BasketFloatingBar } from '@/app/components/BasketFloatingBar';
 import { ListInput } from '@/app/components/ListInput';
+import { ThemeToggle } from '@/app/components/ThemeToggle';
+import { LanguageSwitcher } from '@/app/components/LanguageSwitcher';
+import { BasketSummaryCard } from '@/app/components/BasketSummaryCard';
+import { ProductCard } from '@/app/components/ProductCard';
+import { SkeletonAnswer, SkeletonCard } from '@/app/components/Skeleton';
+import { vibrate } from '@/lib/utils/vibrate';
+import { parseBasketCommand } from '@/lib/utils/basketCommands';
 import {
-  type Locale,
-  LOCALE_LABELS,
-  LOCALES,
   SUGGESTIONS_BY_LOCALE,
   STT_LANG,
 } from '@/lib/i18n/config';
-import type { SearchResultWithStore, BasketResult, BasketItem, SearchStrategy } from '@/types/nearbit';
+import type { SearchResultWithStore, BasketItem, SearchStrategy } from '@/types/nearbit';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 400;
 const THROTTLE_MS = 800;
 const BASKET_RE   = /[,،]|\s+(?:and|ו|או|и|или)\s+/gi;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function vibrate(pattern: number | number[]) {
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    navigator.vibrate(pattern);
-  }
-}
-
-function openInWaze(storeName: string, lat?: number | null, lng?: number | null) {
-  const url =
-    lat != null && lng != null
-      ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
-      : `https://waze.com/livemap/directions?q=${encodeURIComponent(storeName + ' Israel')}`;
-  vibrate(30);
-  window.open(url, '_blank', 'noopener');
-}
-
-function openInMaps(storeName: string, lat?: number | null, lng?: number | null) {
-  const url =
-    lat != null && lng != null
-      ? `https://maps.google.com/maps?q=${lat},${lng}`
-      : `https://maps.google.com/maps?q=${encodeURIComponent(storeName + ' Israel')}`;
-  vibrate(30);
-  window.open(url, '_blank', 'noopener');
-}
-
-// ─── Basket command parser ─────────────────────────────────────────────────────
-
-type BasketCommand =
-  | { type: 'add';    query: string }
-  | { type: 'clear'               }
-  | { type: 'remove'; name:  string };
-
-/**
- * Detect natural-language basket management commands in Hebrew, Russian, and English.
- * Returns null when the input is a plain product search, not a command.
- */
-function parseBasketCommand(input: string): BasketCommand | null {
-  const s = input.trim();
-
-  // Clear: "clear [my] basket/list", "נקה [את ה]סל", "очисти [мой] список"
-  if (/^(?:clear(?:\s+(?:my\s+)?(?:basket|list))?|נקה(?:\s+(?:את\s+ה)?סל)?|очисти?(?:\s+(?:мой\s+)?(?:список|корзину))?)$/i.test(s)) {
-    return { type: 'clear' };
-  }
-
-  // Add: "add X [to my basket/list]", "הוסף X [לסל]", "добавь X [в список]"
-  const addMatch = s.match(
-    /^(?:add|הוסף|добавь?)\s+(.+?)(?:\s+(?:to\s+(?:my\s+)?(?:basket|list)|לסל|в\s+(?:список|корзину)))?$/i,
-  );
-  if (addMatch?.[1]) return { type: 'add', query: addMatch[1].trim() };
-
-  // Remove: "remove X [from basket]", "הסר X [מהסל]", "удали X [из списка]"
-  const removeMatch = s.match(
-    /^(?:remove|הסר|удали?)\s+(.+?)(?:\s+(?:from\s+(?:my\s+)?(?:basket|list)|מהסל|из\s+(?:списка|корзины)))?$/i,
-  );
-  if (removeMatch?.[1]) return { type: 'remove', name: removeMatch[1].trim() };
-
-  return null;
-}
-
-/**
- * Price-trend helper. Returns null when no previousPrice is available.
- */
-function getPriceTrend(
-  current: number | null,
-  previous?: number | null,
-): { type: 'up' | 'down' | 'same'; delta: number } | null {
-  if (current == null || previous == null) return null;
-  const delta = current - previous;
-  if (Math.abs(delta) < 0.005) return { type: 'same', delta: 0 };
-  if (delta < 0)               return { type: 'down', delta };
-  return                              { type: 'up',   delta };
-}
-
-// ─── WhatsApp icon ────────────────────────────────────────────────────────────
-
-const WhatsAppIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.856L.054 23.25a.75.75 0 0 0 .918.919l5.451-1.485A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.907 0-3.693-.512-5.228-1.405l-.375-.217-3.888 1.059 1.025-3.801-.233-.389A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
-  </svg>
-);
-
-// ─── Skeleton components ──────────────────────────────────────────────────────
-
-function SkeletonAnswer() {
-  return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-4">
-      <div className="shimmer h-3 w-16 rounded mb-3" />
-      <div className="flex flex-col gap-2">
-        <div className="shimmer h-4 w-full rounded" />
-        <div className="shimmer h-4 w-4/5 rounded" />
-        <div className="shimmer h-4 w-3/5 rounded" />
-      </div>
-    </div>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <li className="rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 flex items-center justify-between gap-4">
-      <div className="flex flex-col gap-2 flex-1 min-w-0">
-        <div className="shimmer h-4 w-3/4 rounded" />
-        <div className="shimmer h-3 w-1/2 rounded" />
-        <div className="shimmer h-3 w-1/3 rounded" />
-      </div>
-      <div className="flex flex-col items-end gap-2 shrink-0">
-        <div className="shimmer h-5 w-16 rounded" />
-        <div className="shimmer h-3 w-10 rounded" />
-        <div className="shimmer h-3 w-12 rounded" />
-      </div>
-    </li>
-  );
-}
-
-// ─── ThemeToggle ──────────────────────────────────────────────────────────────
-
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const t = useTranslations('theme');
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return <span className="inline-block w-9 h-9" />;
-
-  const isDark = resolvedTheme === 'dark';
-  return (
-    <button
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      aria-label={isDark ? t('toLightMode') : t('toDarkMode')}
-      className="rounded-xl p-2 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-    >
-      {isDark ? <Sun size={20} /> : <Moon size={20} />}
-    </button>
-  );
-}
-
-// ─── LanguageSwitcher ─────────────────────────────────────────────────────────
-
-function LanguageSwitcher() {
-  const { locale, setLocale } = useLocale();
-
-  return (
-    <div className="flex items-center gap-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5">
-      {LOCALES.map((l: Locale) => (
-        <button
-          key={l}
-          type="button"
-          onClick={() => setLocale(l)}
-          aria-pressed={locale === l}
-          className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
-            locale === l
-              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-50 shadow-sm'
-              : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-          }`}
-        >
-          {LOCALE_LABELS[l]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ─── DirectionsButtons ────────────────────────────────────────────────────────
-
-interface DirectionProps {
-  storeName: string;
-  storeLat?: number | null;
-  storeLng?: number | null;
-}
-
-const DirectionsButtons = memo(function DirectionsButtons({ storeName, storeLat, storeLng }: DirectionProps) {
-  const t = useTranslations('product');
-  return (
-    <div className="flex items-center gap-1 mt-1">
-      <button
-        type="button"
-        onClick={() => openInWaze(storeName, storeLat, storeLng)}
-        aria-label={t('openInWaze', { store: storeName })}
-        className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-      >
-        <Navigation size={11} /> Waze
-      </button>
-      <span className="text-zinc-300 dark:text-zinc-600 text-xs">|</span>
-      <button
-        type="button"
-        onClick={() => openInMaps(storeName, storeLat, storeLng)}
-        aria-label={t('openInMaps', { store: storeName })}
-        className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-      >
-        <MapIcon size={11} /> Maps
-      </button>
-    </div>
-  );
-});
-
-// ─── BasketSummaryCard ────────────────────────────────────────────────────────
-
-const BasketSummaryCard = memo(function BasketSummaryCard({
-  basket,
-  query,
-}: {
-  basket: BasketResult;
-  query:  string;
-}) {
-  const tBasket = useTranslations('basket');
-  const tWa     = useTranslations('whatsapp');
-
-  const shareBasket = () => {
-    const text = basket.storeOptions[0]
-      ? tWa('basketBestDeal', {
-          items: basket.items.join(', '),
-          store: basket.storeOptions[0].storeName,
-          total: basket.storeOptions[0].totalCost.toFixed(2),
-        })
-      : tWa('basketFallback', { query });
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  };
-
-  return (
-    <div className="rounded-xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-5 py-4">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3 gap-2">
-        <div>
-          <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-            <ShoppingBasket size={13} /> {tBasket('mode')}
-          </span>
-          <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-300 truncate max-w-xs">
-            {basket.items.join(' · ')}
-          </p>
-        </div>
-        {basket.savings > 0.5 && (
-          <div className="text-right shrink-0">
-            <p className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
-              {tBasket('maxSavings')}
-            </p>
-            <p className="text-xl font-bold text-green-700 dark:text-green-400">
-              ₪{basket.savings.toFixed(2)}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Share basket summary */}
-      <button
-        type="button"
-        onClick={shareBasket}
-        className="mb-3 flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-500 hover:text-green-700 transition-colors"
-      >
-        <WhatsAppIcon />
-        {tBasket('shareBasketSummary')}
-      </button>
-
-      {/* Store comparison rows */}
-      <div className="flex flex-col gap-2">
-        {basket.storeOptions.slice(0, 3).map((s, i) => (
-          <div
-            key={s.storeId}
-            className={`rounded-lg px-3 py-2 flex items-center justify-between gap-2 ${
-              i === 0
-                ? 'bg-green-100 dark:bg-green-950/40 ring-1 ring-green-300 dark:ring-green-800'
-                : 'bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              {i === 0 && <Trophy size={16} className="shrink-0 text-amber-500" />}
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 truncate">
-                  {s.storeName}
-                </p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {tBasket('itemsFound', { found: s.itemsFound, total: s.totalItems })}
-                </p>
-                <div className="flex flex-wrap gap-1 mt-0.5">
-                  {s.items.map((it) => (
-                    <span
-                      key={it.query}
-                      className="text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded px-1 py-0.5 text-zinc-500 dark:text-zinc-400"
-                    >
-                      {it.productName} ₪{it.price.toFixed(2)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col items-end shrink-0 gap-1">
-              <span
-                className={`text-lg font-bold ${
-                  i === 0
-                    ? 'text-green-700 dark:text-green-400'
-                    : 'text-zinc-700 dark:text-zinc-300'
-                }`}
-              >
-                ₪{s.totalCost.toFixed(2)}
-              </span>
-              <DirectionsButtons storeName={s.storeName} storeLat={s.storeLat} storeLng={s.storeLng} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-});
-
-// ─── ProductCard ──────────────────────────────────────────────────────────────
-
-interface ProductCardProps {
-  result:      SearchResultWithStore;
-  searchQuery: string;
-  inBasket:    boolean;
-  onAdd:       (item: BasketItem) => void;
-  onRemove:    (id: string) => void;
-}
-
-const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket, onAdd, onRemove }: ProductCardProps) {
-  const t  = useTranslations('product');
-  const tWa = useTranslations('whatsapp');
-
-  const subtitle = useMemo(
-    () => [r.nameEn, r.category, r.unit].filter(Boolean).join(' · '),
-    [r.nameEn, r.category, r.unit],
-  );
-
-  const trend = getPriceTrend(r.price, r.previousPrice);
-
-  const isLowStock   = r.quantity != null && r.quantity > 0 && r.quantity < 5;
-  const isOutOfStock = r.quantity === 0;
-
-  const productName = r.nameHe ?? r.normalizedName;
-
-  const basketItem = useMemo<BasketItem>(
-    () => ({
-      id:        r.id,
-      name:      productName,
-      price:     r.price,
-      storeName: r.storeName,
-      storeId:   r.storeId,
-      query:     searchQuery,
-      storeLat:  r.storeLat,
-      storeLng:  r.storeLng,
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [r.id, productName, r.price, r.storeName, r.storeId, searchQuery, r.storeLat, r.storeLng],
-  );
-
-  const shareOnWhatsApp = () => {
-    const price = r.price != null ? `${r.price.toFixed(2)} ₪` : '—';
-    const text  = tWa('productText', { name: productName, price, store: r.storeName });
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  };
-
-  // Price trend label
-  const trendLabel = trend
-    ? trend.type === 'same'
-      ? t('priceSame')
-      : trend.type === 'down'
-      ? `↓ ₪${Math.abs(trend.delta).toFixed(2)}`
-      : `↑ ₪${trend.delta.toFixed(2)}`
-    : null;
-
-  return (
-    <li
-      className={`rounded-xl border bg-white dark:bg-zinc-900 px-4 py-3 flex items-start justify-between gap-4 transition-colors ${
-        inBasket
-          ? 'border-green-300 dark:border-green-700 ring-1 ring-green-200 dark:ring-green-800'
-          : 'border-zinc-100 dark:border-zinc-800'
-      }`}
-    >
-      {/* Checkbox */}
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={inBasket}
-        aria-label={inBasket ? t('removeFromBasket', { name: productName }) : t('addToBasket', { name: productName })}
-        onClick={() => { inBasket ? onRemove(r.id) : onAdd(basketItem); vibrate(20); }}
-        className={`mt-0.5 shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
-          inBasket
-            ? 'bg-green-500 border-green-500 text-white'
-            : 'border-zinc-300 dark:border-zinc-600 hover:border-green-400 dark:hover:border-green-500'
-        }`}
-      >
-        {inBasket && (
-          <svg width="10" height="8" viewBox="0 0 10 8" fill="none" aria-hidden="true">
-            <path d="M1 4l2.5 2.5L9 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
-
-      {/* Left column */}
-      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-        <span
-          className="font-medium text-zinc-900 dark:text-zinc-50 truncate"
-          dir="rtl"
-          title={productName}
-        >
-          {productName}
-        </span>
-
-        {subtitle && (
-          <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate">{subtitle}</span>
-        )}
-
-        <span className="text-xs text-zinc-400">{r.storeName}</span>
-
-        {/* Directions + Share row */}
-        <div className="flex items-center gap-3 mt-1 flex-wrap">
-          <DirectionsButtons storeName={r.storeName} storeLat={r.storeLat} storeLng={r.storeLng} />
-          <button
-            type="button"
-            onClick={shareOnWhatsApp}
-            aria-label={t('shareAriaLabel', { name: productName })}
-            className="flex items-center gap-1 text-xs text-green-600 dark:text-green-500 hover:text-green-700 dark:hover:text-green-400 transition-colors"
-          >
-            <WhatsAppIcon />
-            <span>{t('share')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Right column */}
-      <div className="flex flex-col items-end shrink-0 gap-1">
-        {r.price != null && (
-          <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-            ₪{r.price.toFixed(2)}
-          </span>
-        )}
-
-        {trendLabel && (
-          <span
-            className={`text-[11px] font-medium ${
-              trend?.type === 'down' ? 'text-green-600 dark:text-green-400' :
-              trend?.type === 'up'   ? 'text-red-500  dark:text-red-400'   :
-                                       'text-zinc-400'
-            }`}
-          >
-            {trendLabel}
-          </span>
-        )}
-
-        {/* Distance badge */}
-        {r.distanceKm != null && (
-          <span className="inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-            <MapPin size={10} /> {r.distanceKm} km
-          </span>
-        )}
-
-        {isLowStock && (
-          <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-orange-600 dark:text-orange-400">
-            <AlertTriangle size={11} /> {t('lowStock', { qty: r.quantity ?? 0 })}
-          </span>
-        )}
-        {isOutOfStock && (
-          <span className="text-[11px] font-semibold text-red-500 dark:text-red-400">
-            {t('outOfStock')}
-          </span>
-        )}
-
-        <span className="text-[11px] text-zinc-400">
-          {t('match', { score: (r.similarity * 100).toFixed(0) })}
-        </span>
-      </div>
-    </li>
-  );
-});
 
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
@@ -536,11 +72,11 @@ export default function Home() {
   const [sttLang, setSttLang]               = useState<'he-IL' | 'ru-RU' | 'en-US'>(STT_LANG[locale]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // ── List (basket) input mode ────────────────────────────────────────────────
+  // ── List (basket) input mode ─────────────────────────────────────────────────
   // 'text'  — normal textarea (default)
   // 'list'  — chip-based list builder (auto-activated on comma / newline)
-  const [inputMode, setInputMode]   = useState<'text' | 'list'>('text');
-  const [listItems, setListItems]   = useState<string[]>([]);
+  const [inputMode, setInputMode] = useState<'text' | 'list'>('text');
+  const [listItems, setListItems] = useState<string[]>([]);
 
   // Keep sttLang in sync when user switches app language
   useEffect(() => {
@@ -561,32 +97,28 @@ export default function Home() {
   const pendingAutoAddQueryRef = useRef<string | null>(null);
   const [pendingAddLabel, setPendingAddLabel] = useState<string | null>(null);
 
-  const resultsAnchorRef  = useRef<HTMLDivElement>(null);
-  const textareaRef       = useRef<HTMLTextAreaElement>(null);
+  const resultsAnchorRef = useRef<HTMLDivElement>(null);
+  const textareaRef      = useRef<HTMLTextAreaElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef    = useRef<any>(null);
+  const recognitionRef   = useRef<any>(null);
 
-  // ── Share helpers (inside component to access t()) ─────────────────────────
-  const shareProductToWhatsApp = useCallback((r: SearchResultWithStore) => {
-    const price = r.price != null ? `${r.price.toFixed(2)} ₪` : '—';
-    const text  = tWa('productText', { name: r.nameHe ?? r.normalizedName, price, store: r.storeName });
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  }, [tWa]);
-
+  // ── Share helpers ────────────────────────────────────────────────────────────
   const shareAnswerToWhatsApp = useCallback((answer: string, query: string) => {
     const text = tWa('answerText', { query, answer });
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   }, [tWa]);
 
-  // ── List-mode: keep committedQuery in sync when chips change ───────────────
-  // When items are added/removed in list mode, update the debounced query so
-  // the search re-fires automatically without requiring the user to tap Search.
+  // ── List-mode: keep committedQuery in sync when chips change ─────────────────
+  // Fix: sync for any list length ≥1 (not only ≥2) so single-chip search works.
+  // Clear committedQuery when list becomes empty to avoid stale results.
   const handleListItemsChange = useCallback(
     (next: string[]) => {
       setListItems(next);
-      if (next.length >= 2) {
-        const joined = next.filter((s) => s.trim().length >= 2).join(', ');
-        setCommittedQuery(joined);
+      if (next.length === 0) {
+        setCommittedQuery('');
+      } else {
+        const joined = next.filter((s) => s.trim().length >= MIN_QUERY_LENGTH).join(', ');
+        if (joined) setCommittedQuery(joined);
       }
     },
     [],
@@ -599,7 +131,7 @@ export default function Home() {
     setInputValue('');
   }, []);
 
-  // ── Basket detection ──────────────────────────────────────────────────────
+  // ── Basket detection ─────────────────────────────────────────────────────────
   const isBasketQueryFromText = useMemo(() => {
     const parts = committedQuery
       .split(BASKET_RE)
@@ -609,7 +141,7 @@ export default function Home() {
   }, [committedQuery]);
   const isBasketQuery = inputMode === 'list' ? listItems.length >= 2 : isBasketQueryFromText;
 
-  // ── Debounce ───────────────────────────────────────────────────────────────
+  // ── Debounce ─────────────────────────────────────────────────────────────────
   const debouncedCommit = useRef(
     debounce((value: string) => {
       const trimmed = value.trim();
@@ -619,7 +151,7 @@ export default function Home() {
 
   useEffect(() => () => debouncedCommit.cancel(), [debouncedCommit]);
 
-  // ── Auto-resize textarea ────────────────────────────────────────────────────
+  // ── Auto-resize textarea ─────────────────────────────────────────────────────
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -627,15 +159,14 @@ export default function Home() {
     el.style.height = `${el.scrollHeight}px`;
   }, [inputValue]);
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleInputChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       const value = e.target.value.slice(0, MAX_QUERY_LENGTH);
       setInputValue(value);
       setValidationError(null);
 
-      // ── Auto-transform to list mode ─────────────────────────────────────
-      // Triggered when user types a comma or newline and produces ≥2 segments.
+      // Auto-transform to list mode on comma or newline with ≥2 segments
       if (value.includes(',') || value.includes('\n')) {
         const segments = value
           .split(/[,،\n]/)
@@ -645,7 +176,7 @@ export default function Home() {
           setListItems(segments);
           setInputMode('list');
           debouncedCommit.cancel();
-          setCommittedQuery(''); // clear stale single-item query
+          setCommittedQuery('');
           return;
         }
       }
@@ -659,9 +190,9 @@ export default function Home() {
   const executeSearch = useCallback(() => {
     debouncedCommit.cancel();
 
-    // In list mode: join all chips as a basket query
+    // In list mode: join all valid chips as a basket query
     const trimmed = inputMode === 'list'
-      ? listItems.filter((s) => s.trim().length >= 2).join(', ')
+      ? listItems.filter((s) => s.trim().length >= MIN_QUERY_LENGTH).join(', ')
       : inputValue.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
 
     if (trimmed.length < MIN_QUERY_LENGTH) return;
@@ -714,8 +245,11 @@ export default function Home() {
     [executeSearch],
   );
 
-  // ── Voice input ────────────────────────────────────────────────────────────
+  // ── Voice input ──────────────────────────────────────────────────────────────
   const handleMic = useCallback(() => {
+    // Only available in text mode
+    if (inputMode === 'list') return;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
     if (!SR) return;
@@ -748,7 +282,7 @@ export default function Home() {
     };
 
     rec.start();
-  }, [isListening, sttLang, debouncedCommit]);
+  }, [inputMode, isListening, sttLang, debouncedCommit]);
 
   const throttledSuggestion = useRef(
     throttle(
@@ -763,7 +297,7 @@ export default function Home() {
     [debouncedCommit, throttledSuggestion],
   );
 
-  // ── Geolocation ───────────────────────────────────────────────────────────
+  // ── Geolocation ──────────────────────────────────────────────────────────────
   const requestLocation = useRef(
     throttle(
       () => {
@@ -787,7 +321,7 @@ export default function Home() {
     ),
   ).current;
 
-  // ── TanStack Query ─────────────────────────────────────────────────────────
+  // ── TanStack Query ───────────────────────────────────────────────────────────
   const { data, isFetching, isError, error, isSuccess } = useQuery({
     queryKey: ['search', committedQuery, userLocation, strategy] as const,
     queryFn:  ({ signal }) =>
@@ -795,7 +329,7 @@ export default function Home() {
     enabled:  committedQuery.length >= MIN_QUERY_LENGTH,
   });
 
-  // ── Haptic + scroll + auto-add ─────────────────────────────────────────────
+  // ── Haptic + scroll + auto-add ───────────────────────────────────────────────
   useEffect(() => {
     if (!data) return;
     vibrate(50);
@@ -826,16 +360,23 @@ export default function Home() {
     }
   }, [isError]);
 
-  // ── Derived state ──────────────────────────────────────────────────────────
+  // ── Derived state ─────────────────────────────────────────────────────────────
   const isNetworkError  = isError && error instanceof SearchError && error.isNetworkError;
   const hasResults      = isSuccess && data.results.length > 0;
   const showInitialHint = !isFetching && !isSuccess && !isError;
   const nearLimit       = inputValue.length > MAX_QUERY_LENGTH * 0.8;
 
+  // Submit disabled: respect current input mode
+  const isSubmitDisabled = isFetching || (
+    inputMode === 'list'
+      ? listItems.filter((s) => s.trim().length >= MIN_QUERY_LENGTH).length === 0
+      : inputValue.trim().length < MIN_QUERY_LENGTH
+  );
+
   // STT language display name
   const sttLangName = sttLang === 'he-IL' ? tVoice('he') : sttLang === 'ru-RU' ? tVoice('ru') : tVoice('en');
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans">
 
@@ -861,7 +402,7 @@ export default function Home() {
         <section>
           <form onSubmit={handleSubmit} className="flex items-start gap-2">
             <div className="relative flex-1">
-              {/* ── List mode: chip builder (auto-activates on comma/newline) ── */}
+              {/* List mode: chip builder */}
               {inputMode === 'list' ? (
                 <ListInput
                   items={listItems}
@@ -886,41 +427,43 @@ export default function Home() {
                 />
               )}
 
-              {/* Mic controls — pinned to bottom-right of textarea (text mode only) */}
-              <div className={`absolute bottom-2 right-2 flex items-center gap-1 ${inputMode === 'list' ? 'hidden' : ''}`}>
-                {/* STT language cycle: HE → RU → EN → HE */}
-                <button
-                  type="button"
-                  onClick={() => setSttLang((l) =>
-                    l === 'he-IL' ? 'ru-RU' : l === 'ru-RU' ? 'en-US' : 'he-IL'
-                  )}
-                  title={tVoice('langTitle', { lang: sttLangName })}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  {sttLang === 'he-IL' ? 'HE' : sttLang === 'ru-RU' ? 'RU' : 'EN'}
-                </button>
+              {/* Mic controls — text mode only */}
+              {inputMode === 'text' && (
+                <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                  {/* STT language cycle: HE → RU → EN → HE */}
+                  <button
+                    type="button"
+                    onClick={() => setSttLang((l) =>
+                      l === 'he-IL' ? 'ru-RU' : l === 'ru-RU' ? 'en-US' : 'he-IL'
+                    )}
+                    title={tVoice('langTitle', { lang: sttLangName })}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    {sttLang === 'he-IL' ? 'HE' : sttLang === 'ru-RU' ? 'RU' : 'EN'}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={handleMic}
-                  aria-label={isListening ? tVoice('stopListening') : tVoice('startListening')}
-                  title={isListening ? tVoice('listeningTitle') : tVoice('voiceTitle')}
-                  className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors ${
-                    isListening
-                      ? 'text-red-500 bg-red-50 dark:bg-red-950/30 animate-pulse'
-                      : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  {isListening ? <MicOff size={15} /> : <Mic size={15} />}
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={handleMic}
+                    aria-label={isListening ? tVoice('stopListening') : tVoice('startListening')}
+                    title={isListening ? tVoice('listeningTitle') : tVoice('voiceTitle')}
+                    className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors ${
+                      isListening
+                        ? 'text-red-500 bg-red-50 dark:bg-red-950/30 animate-pulse'
+                        : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    {isListening ? <MicOff size={15} /> : <Mic size={15} />}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Submit + location stacked vertically */}
             <div className="flex flex-col gap-1.5">
               <button
                 type="submit"
-                disabled={isFetching || inputValue.trim().length < MIN_QUERY_LENGTH}
+                disabled={isSubmitDisabled}
                 aria-busy={isFetching}
                 className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-900 dark:bg-zinc-50 px-5 py-3 text-sm font-semibold text-white dark:text-zinc-900 transition-opacity disabled:opacity-40 hover:opacity-80"
               >
@@ -972,7 +515,7 @@ export default function Home() {
             </p>
           )}
 
-          {nearLimit && (
+          {nearLimit && inputMode === 'text' && (
             <p className="mt-0.5 text-right text-xs text-zinc-400">
               {tSearch('charCount', { count: inputValue.length, max: MAX_QUERY_LENGTH })}
             </p>
@@ -1081,7 +624,13 @@ export default function Home() {
                   aria-label={tResults('shareAriaLabel')}
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors"
                 >
-                  <WhatsAppIcon />
+                  <span className="text-green-600 dark:text-green-500">
+                    {/* WhatsApp icon inline to avoid extra import in this slot */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.122 1.532 5.856L.054 23.25a.75.75 0 0 0 .918.919l5.451-1.485A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.907 0-3.693-.512-5.228-1.405l-.375-.217-3.888 1.059 1.025-3.801-.233-.389A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
+                    </svg>
+                  </span>
                   {tResults('share')}
                 </button>
               </div>
@@ -1110,6 +659,7 @@ export default function Home() {
                       inBasket={hasItem(r.id)}
                       onAdd={handleAddItem}
                       onRemove={handleRemoveItem}
+                      onVibrate={vibrate}
                     />
                   ))}
                 </ul>
