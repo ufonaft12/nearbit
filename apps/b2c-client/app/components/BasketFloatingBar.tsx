@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Navigation } from 'lucide-react';
+import { Navigation, ShoppingBasket } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { removeItem, clearBasket } from '@/lib/store/basketSlice';
 
@@ -136,8 +136,8 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
           {/* ── Summary row ───────────────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 mb-2.5">
             <div>
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                🧺 {items.length} item{items.length !== 1 ? 's' : ''} in basket
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                <ShoppingBasket size={14} /> {items.length} item{items.length !== 1 ? 's' : ''} in basket
               </p>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Estimated:{' '}
@@ -201,7 +201,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
                   }}
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors text-left"
                 >
-                  <span className="text-base">🚗</span>
+                  <Navigation size={14} className="shrink-0" />
                   <span className="truncate">{store.storeName}</span>
                 </button>
               ))}

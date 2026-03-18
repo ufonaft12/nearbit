@@ -21,9 +21,11 @@ import {
   MapPin, MapPinOff, Loader2,
   Navigation, Map as MapIcon,
   Search as SearchIcon, Coins, ShoppingBasket,
+  Trophy, AlertTriangle,
 } from 'lucide-react';
 
 import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/lib/search';
+import { validateQuery } from '@/lib/validateQuery';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { addItem, removeItem, clearBasket, setStrategy } from '@/lib/store/basketSlice';
 import { BasketFloatingBar } from '@/app/components/BasketFloatingBar';
@@ -230,8 +232,8 @@ const BasketSummaryCard = memo(function BasketSummaryCard({
       {/* Header */}
       <div className="flex items-start justify-between mb-3 gap-2">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-            🧺 Basket Mode
+          <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+            <ShoppingBasket size={13} /> Basket Mode
           </span>
           <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-300 truncate max-w-xs">
             {basket.items.join(' · ')}
@@ -274,7 +276,7 @@ const BasketSummaryCard = memo(function BasketSummaryCard({
             }`}
           >
             <div className="flex items-center gap-2 min-w-0">
-              {i === 0 && <span className="text-base shrink-0">🏆</span>}
+              {i === 0 && <Trophy size={16} className="shrink-0 text-amber-500" />}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 truncate">
                   {s.storeName}
@@ -434,14 +436,14 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
         {/* Distance badge */}
         {r.distanceKm != null && (
           <span className="inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-            📍 {r.distanceKm} km
+            <MapPin size={10} /> {r.distanceKm} km
           </span>
         )}
 
         {/* Scarcity alert */}
         {isLowStock && (
-          <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">
-            ⚠️ {r.quantity} left!
+          <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-orange-600 dark:text-orange-400">
+            <AlertTriangle size={11} /> {r.quantity} left!
           </span>
         )}
         {isOutOfStock && (
@@ -460,7 +462,7 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
 
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
-type LocStatus = 'idle' | 'requesting' | 'active' | 'denied';
+type LocStatus = 'idle' | 'requesting' | 'active' | 'denied' | 'unavailable';
 
 export default function Home() {
   const [inputValue, setInputValue]         = useState('');
@@ -469,6 +471,7 @@ export default function Home() {
   const [locStatus, setLocStatus]           = useState<LocStatus>('idle');
   const [isListening, setIsListening]       = useState(false);
   const [sttLang, setSttLang]               = useState<'he-IL' | 'ru-RU' | 'en-US'>('he-IL');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const dispatch = useAppDispatch();
   const { items, strategy } = useAppSelector((s) => s.basket);
@@ -526,6 +529,7 @@ export default function Home() {
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       const value = e.target.value.slice(0, MAX_QUERY_LENGTH);
       setInputValue(value);
+      setValidationError(null);
       // Normalize newlines → ", " so the basket regex fires on multi-line input
       const normalized = value.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
       debouncedCommit(normalized);
@@ -543,6 +547,14 @@ export default function Home() {
       .filter(Boolean)
       .join(', ');
     if (trimmed.length < MIN_QUERY_LENGTH) return;
+
+    // ── Validate before hitting the API ────────────────────────────────────
+    const validation = validateQuery(trimmed);
+    if (!validation.ok) {
+      setValidationError(validation.reason ?? 'Invalid search query.');
+      return;
+    }
+    setValidationError(null);
 
     const cmd = parseBasketCommand(trimmed);
     if (cmd) {
@@ -639,7 +651,7 @@ export default function Home() {
   const requestLocation = useRef(
     throttle(
       () => {
-        if (!navigator.geolocation) { setLocStatus('denied'); return; }
+        if (!navigator.geolocation) { setLocStatus('unavailable'); return; }
         setLocStatus('requesting');
         vibrate(30);
         navigator.geolocation.getCurrentPosition(
@@ -648,7 +660,11 @@ export default function Home() {
             setLocStatus('active');
             vibrate([30, 50, 30]);
           },
-          () => setLocStatus('denied'),
+          (err) => {
+            // PERMISSION_DENIED (1) — user explicitly blocked; show MapPinOff
+            // POSITION_UNAVAILABLE (2) / TIMEOUT (3) — transient; let user retry
+            setLocStatus(err.code === 1 ? 'denied' : 'idle');
+          },
           { timeout: 10_000 },
         );
       },
@@ -793,23 +809,26 @@ export default function Home() {
               <button
                 type="button"
                 onClick={requestLocation}
-                disabled={locStatus === 'requesting' || locStatus === 'denied'}
+                disabled={locStatus === 'requesting' || locStatus === 'denied' || locStatus === 'unavailable'}
                 title={
-                  locStatus === 'active'     ? 'Location active'      :
-                  locStatus === 'denied'     ? 'Location denied'      :
-                  locStatus === 'requesting' ? 'Requesting location…' :
-                  'Share my location for distances'
+                  locStatus === 'active'      ? 'Location active — click to refresh'         :
+                  locStatus === 'denied'      ? 'Blocked — enable location in browser settings' :
+                  locStatus === 'unavailable' ? 'Geolocation not supported by this browser'  :
+                  locStatus === 'requesting'  ? 'Requesting location…'                       :
+                  'Share my location for closer results'
                 }
                 aria-label="Share location"
                 className={`flex items-center justify-center rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-40 ${
                   locStatus === 'active'
                     ? 'border-green-400 text-green-500 bg-green-50 dark:bg-green-950/30'
+                    : locStatus === 'denied' || locStatus === 'unavailable'
+                    ? 'border-red-300 dark:border-red-800 text-red-400'
                     : 'border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                 }`}
               >
                 {locStatus === 'requesting'
                   ? <Loader2 size={18} className="animate-spin" />
-                  : locStatus === 'denied'
+                  : locStatus === 'denied' || locStatus === 'unavailable'
                   ? <MapPinOff size={18} />
                   : <MapPin size={18} />
                 }
@@ -820,6 +839,14 @@ export default function Home() {
           <p className="mt-1 text-xs text-zinc-400">
             Enter לחיפוש · Shift+Enter לשורה חדשה · <Mic className="inline mb-0.5" size={11} /> קול (HE / RU / EN)
           </p>
+
+          {/* Validation error */}
+          {validationError && (
+            <p role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+              <AlertTriangle size={12} />
+              {validationError}
+            </p>
+          )}
 
           {nearLimit && (
             <p className="mt-0.5 text-right text-xs text-zinc-400">
@@ -966,7 +993,7 @@ export default function Home() {
               </>
             ) : (
               <div className="flex flex-col items-center gap-2 py-8 text-zinc-400">
-                <span className="text-3xl" aria-hidden="true">🔍</span>
+                <SearchIcon size={36} aria-hidden="true" />
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
                   No products found
                 </p>
