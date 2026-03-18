@@ -9,11 +9,19 @@ import {
   memo,
   type FormEvent,
   type ChangeEvent,
+  type KeyboardEvent,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
+
+import {
+  Sun, Moon, Mic, MicOff,
+  MapPin, MapPinOff, Loader2,
+  Navigation, Map as MapIcon,
+  Search as SearchIcon, Coins, ShoppingBasket,
+} from 'lucide-react';
 
 import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/lib/search';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
@@ -130,18 +138,7 @@ function ThemeToggle() {
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       className="rounded-xl p-2 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
     >
-      {isDark ? (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="4"/>
-          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-        </svg>
-      ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-        </svg>
-      )}
+      {isDark ? <Sun size={20} /> : <Moon size={20} />}
     </button>
   );
 }
@@ -204,7 +201,7 @@ const DirectionsButtons = memo(function DirectionsButtons({ storeName, storeLat,
         aria-label={`Open ${storeName} in Waze`}
         className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
       >
-        🚗 Waze
+        <Navigation size={11} /> Waze
       </button>
       <span className="text-zinc-300 dark:text-zinc-600 text-xs">|</span>
       <button
@@ -213,7 +210,7 @@ const DirectionsButtons = memo(function DirectionsButtons({ storeName, storeLat,
         aria-label={`Open ${storeName} in Google Maps`}
         className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
       >
-        🗺️ Maps
+        <MapIcon size={11} /> Maps
       </button>
     </div>
   );
@@ -470,6 +467,8 @@ export default function Home() {
   const [committedQuery, setCommittedQuery] = useState('');
   const [userLocation, setUserLocation]     = useState<{ lat: number; lng: number } | null>(null);
   const [locStatus, setLocStatus]           = useState<LocStatus>('idle');
+  const [isListening, setIsListening]       = useState(false);
+  const [sttLang, setSttLang]               = useState<'he-IL' | 'ru-RU' | 'en-US'>('he-IL');
 
   const dispatch = useAppDispatch();
   const { items, strategy } = useAppSelector((s) => s.basket);
@@ -490,7 +489,10 @@ export default function Home() {
   // Visible "Adding [item]…" label shown in the floating bar during a silent add-search
   const [pendingAddLabel, setPendingAddLabel] = useState<string | null>(null);
 
-  const resultsAnchorRef = useRef<HTMLDivElement>(null);
+  const resultsAnchorRef  = useRef<HTMLDivElement>(null);
+  const textareaRef       = useRef<HTMLTextAreaElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef    = useRef<any>(null);
 
   // ── Basket detection (client-side, mirrors server logic) ──────────────────
   const isBasketQuery = useMemo(() => {
@@ -511,52 +513,113 @@ export default function Home() {
 
   useEffect(() => () => debouncedCommit.cancel(), [debouncedCommit]);
 
+  // ── Auto-resize textarea ────────────────────────────────────────────────────
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inputValue]);
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleInputChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
+    (e: ChangeEvent<HTMLTextAreaElement>) => {
       const value = e.target.value.slice(0, MAX_QUERY_LENGTH);
       setInputValue(value);
-      debouncedCommit(value);
+      // Normalize newlines → ", " so the basket regex fires on multi-line input
+      const normalized = value.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
+      debouncedCommit(normalized);
     },
     [debouncedCommit],
   );
 
-  const handleSubmit = useCallback(
-    (e: FormEvent) => {
-      e.preventDefault();
-      debouncedCommit.cancel();
-      const trimmed = inputValue.trim();
-      if (trimmed.length < MIN_QUERY_LENGTH) return;
+  // Core search logic — called from both form submit and Enter key
+  const executeSearch = useCallback(() => {
+    debouncedCommit.cancel();
+    // Join multiple lines with ", " so the basket regex fires correctly
+    const trimmed = inputValue
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join(', ');
+    if (trimmed.length < MIN_QUERY_LENGTH) return;
 
-      // ── Basket command detection ───────────────────────────────────────────
-      const cmd = parseBasketCommand(trimmed);
-      if (cmd) {
-        if (cmd.type === 'clear') {
-          dispatch(clearBasket());
-          setInputValue('');
-          return;
-        }
-        if (cmd.type === 'remove') {
-          // Best-effort: match item by name substring (case-insensitive)
-          const needle = cmd.name.toLowerCase();
-          const match  = items.find((i) => i.name.toLowerCase().includes(needle));
-          if (match) dispatch(removeItem(match.id));
-          setInputValue('');
-          return;
-        }
-        if (cmd.type === 'add') {
-          pendingAutoAddQueryRef.current = cmd.query;
-          setPendingAddLabel(cmd.query);   // show "Adding [item]…" in floating bar
-          setCommittedQuery(cmd.query);
-          setInputValue(cmd.query);
-          return;
-        }
+    const cmd = parseBasketCommand(trimmed);
+    if (cmd) {
+      if (cmd.type === 'clear') {
+        dispatch(clearBasket());
+        setInputValue('');
+        return;
       }
+      if (cmd.type === 'remove') {
+        const needle = cmd.name.toLowerCase();
+        const match  = items.find((i) => i.name.toLowerCase().includes(needle));
+        if (match) dispatch(removeItem(match.id));
+        setInputValue('');
+        return;
+      }
+      if (cmd.type === 'add') {
+        pendingAutoAddQueryRef.current = cmd.query;
+        setPendingAddLabel(cmd.query);
+        setCommittedQuery(cmd.query);
+        setInputValue(cmd.query);
+        return;
+      }
+    }
 
-      setCommittedQuery(trimmed);
-    },
-    [inputValue, debouncedCommit, dispatch, items],
+    setCommittedQuery(trimmed);
+  }, [inputValue, debouncedCommit, dispatch, items]);
+
+  const handleSubmit = useCallback(
+    (e: FormEvent) => { e.preventDefault(); executeSearch(); },
+    [executeSearch],
   );
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        executeSearch();
+      }
+    },
+    [executeSearch],
+  );
+
+  // ── Voice input (Web Speech API) ────────────────────────────────────────────
+  const handleMic = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    if (!SR) return; // browser doesn't support STT
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const rec = new SR();
+    recognitionRef.current = rec;
+    rec.lang             = sttLang;
+    rec.interimResults   = false;
+    rec.maxAlternatives  = 1;
+
+    rec.onstart = () => setIsListening(true);
+    rec.onend   = () => setIsListening(false);
+    rec.onerror = () => setIsListening(false);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (event: any) => {
+      const transcript: string = event.results[0][0].transcript;
+      setInputValue((prev) => {
+        const next    = prev ? `${prev}\n${transcript}` : transcript;
+        const sliced  = next.slice(0, MAX_QUERY_LENGTH);
+        const normalized = sliced.split('\n').map((l: string) => l.trim()).filter(Boolean).join(', ');
+        debouncedCommit(normalized);
+        return sliced;
+      });
+    };
+
+    rec.start();
+  }, [isListening, sttLang, debouncedCommit]);
 
   const throttledSuggestion = useRef(
     throttle(
@@ -663,52 +726,103 @@ export default function Home() {
 
         {/* ── Search box ── */}
         <section>
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={handleInputChange}
-              placeholder="חפש מוצר... (חלב, ביצים, חומוס or milk, eggs)"
-              dir="auto"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={MAX_QUERY_LENGTH}
-              aria-label="Search products"
-              className="flex-1 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-            />
-            <button
-              type="submit"
-              disabled={isFetching || inputValue.trim().length < MIN_QUERY_LENGTH}
-              aria-busy={isFetching}
-              className="rounded-xl bg-zinc-900 dark:bg-zinc-50 px-5 py-3 text-sm font-semibold text-white dark:text-zinc-900 transition-opacity disabled:opacity-40 hover:opacity-80"
-            >
-              {isFetching ? '...' : 'Search'}
-            </button>
+          <form onSubmit={handleSubmit} className="flex items-start gap-2">
+            {/* Textarea + mic in a relative wrapper */}
+            <div className="relative flex-1">
+              <textarea
+                ref={textareaRef}
+                value={inputValue}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder={`חפש מוצר... (חלב, ביצים, חומוס)\nאו רשום כל מוצר בשורה חדשה`}
+                dir="auto"
+                autoComplete="off"
+                spellCheck={false}
+                rows={1}
+                maxLength={MAX_QUERY_LENGTH}
+                aria-label="Search products"
+                className="w-full resize-none overflow-hidden rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+                style={{ minHeight: '48px' }}
+              />
 
-            {/* Location button */}
-            <button
-              type="button"
-              onClick={requestLocation}
-              disabled={locStatus === 'requesting' || locStatus === 'denied'}
-              title={
-                locStatus === 'active'     ? 'Location active'        :
-                locStatus === 'denied'     ? 'Location denied'        :
-                locStatus === 'requesting' ? 'Requesting location…'   :
-                'Share my location for distances'
-              }
-              aria-label="Share location"
-              className={`rounded-xl border px-3 py-3 text-lg transition-colors disabled:opacity-40 ${
-                locStatus === 'active'
-                  ? 'border-green-400 text-green-500 bg-green-50 dark:bg-green-950/30'
-                  : 'border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-              }`}
-            >
-              {locStatus === 'requesting' ? '⏳' : locStatus === 'denied' ? '🚫' : '📍'}
-            </button>
+              {/* Mic controls — pinned to bottom-right of textarea */}
+              <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                {/* Language cycle: HE → RU → EN → HE */}
+                <button
+                  type="button"
+                  onClick={() => setSttLang((l) =>
+                    l === 'he-IL' ? 'ru-RU' : l === 'ru-RU' ? 'en-US' : 'he-IL'
+                  )}
+                  title={`Voice: ${sttLang === 'he-IL' ? 'Hebrew' : sttLang === 'ru-RU' ? 'Russian' : 'English'} — click to switch`}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  {sttLang === 'he-IL' ? 'HE' : sttLang === 'ru-RU' ? 'RU' : 'EN'}
+                </button>
+
+                {/* Mic button */}
+                <button
+                  type="button"
+                  onClick={handleMic}
+                  aria-label={isListening ? 'Stop listening' : 'Start voice input'}
+                  title={isListening ? 'Listening… (click to stop)' : 'Voice input'}
+                  className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors ${
+                    isListening
+                      ? 'text-red-500 bg-red-50 dark:bg-red-950/30 animate-pulse'
+                      : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  {isListening ? <MicOff size={15} /> : <Mic size={15} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit + location stacked vertically */}
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="submit"
+                disabled={isFetching || inputValue.trim().length < MIN_QUERY_LENGTH}
+                aria-busy={isFetching}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-900 dark:bg-zinc-50 px-5 py-3 text-sm font-semibold text-white dark:text-zinc-900 transition-opacity disabled:opacity-40 hover:opacity-80"
+              >
+                {isFetching
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <><SearchIcon size={15} /> Search</>
+                }
+              </button>
+
+              <button
+                type="button"
+                onClick={requestLocation}
+                disabled={locStatus === 'requesting' || locStatus === 'denied'}
+                title={
+                  locStatus === 'active'     ? 'Location active'      :
+                  locStatus === 'denied'     ? 'Location denied'      :
+                  locStatus === 'requesting' ? 'Requesting location…' :
+                  'Share my location for distances'
+                }
+                aria-label="Share location"
+                className={`flex items-center justify-center rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-40 ${
+                  locStatus === 'active'
+                    ? 'border-green-400 text-green-500 bg-green-50 dark:bg-green-950/30'
+                    : 'border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                }`}
+              >
+                {locStatus === 'requesting'
+                  ? <Loader2 size={18} className="animate-spin" />
+                  : locStatus === 'denied'
+                  ? <MapPinOff size={18} />
+                  : <MapPin size={18} />
+                }
+              </button>
+            </div>
           </form>
 
+          <p className="mt-1 text-xs text-zinc-400">
+            Enter לחיפוש · Shift+Enter לשורה חדשה · <Mic className="inline mb-0.5" size={11} /> קול (HE / RU / EN)
+          </p>
+
           {nearLimit && (
-            <p className="mt-1 text-right text-xs text-zinc-400">
+            <p className="mt-0.5 text-right text-xs text-zinc-400">
               {inputValue.length} / {MAX_QUERY_LENGTH}
             </p>
           )}
@@ -716,7 +830,7 @@ export default function Home() {
           {/* Basket mode indicator */}
           {isBasketQuery && (
             <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-              🧺 Basket mode — comparing prices across stores
+              <ShoppingBasket size={13} /> Basket mode — comparing prices across stores
             </p>
           )}
 
@@ -732,7 +846,7 @@ export default function Home() {
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
                 }`}
               >
-                📍 Near Me
+                <MapPin size={12} /> Near Me
               </button>
               <button
                 type="button"
@@ -743,7 +857,7 @@ export default function Home() {
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
                 }`}
               >
-                💰 Lowest Price
+                <Coins size={12} /> Lowest Price
               </button>
             </div>
           )}

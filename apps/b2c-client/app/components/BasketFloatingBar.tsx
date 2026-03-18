@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { Navigation } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { removeItem, clearBasket } from '@/lib/store/basketSlice';
 
@@ -47,13 +48,8 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
   // Multi-store Waze picker toggle
   const [showStorePicker, setShowStorePicker] = useState(false);
 
-  // Render nothing until localStorage hydration is complete — prevents the
-  // floating bar from flashing in/out on first paint.
-  if (!hydrated || items.length === 0) return null;
-
-  const totalCost = items.reduce((sum, i) => sum + (i.price ?? 0), 0);
-
   // Unique stores in basket order (first appearance wins)
+  // Must be above the early return to satisfy Rules of Hooks.
   const uniqueStores = useMemo(() => {
     const seen = new Map<string, { storeId: string; storeName: string; storeLat?: number | null; storeLng?: number | null }>();
     for (const item of items) {
@@ -67,8 +63,13 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
       }
     }
     return [...seen.values()];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
+
+  // Render nothing until localStorage hydration is complete — prevents the
+  // floating bar from flashing in/out on first paint.
+  if (!hydrated || items.length === 0) return null;
+
+  const totalCost = items.reduce((sum, i) => sum + (i.price ?? 0), 0);
 
   const multiStore = uniqueStores.length > 1;
 
@@ -217,7 +218,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
                 aria-expanded={showStorePicker}
                 className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold py-2.5 transition-colors"
               >
-                🚗 יאללה! Waze {showStorePicker ? '▲' : '▾'}
+                <Navigation size={15} /> יאללה! Waze {showStorePicker ? '▲' : '▾'}
               </button>
             ) : (
               <button
@@ -225,7 +226,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
                 onClick={() => openSingleWaze(uniqueStores[0])}
                 className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold py-2.5 transition-colors"
               >
-                🚗 יאללה! Waze
+                <Navigation size={15} /> יאללה! Waze
               </button>
             )}
 
