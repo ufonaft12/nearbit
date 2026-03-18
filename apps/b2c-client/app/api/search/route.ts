@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase/client';
 import { getQueryEmbedding, generateSearchAnswer, generateBasketAnswer } from '@/lib/ai/openai';
 import { redis, CACHE_TTL_SECONDS, STORE_META_TTL_SECONDS } from '@/lib/redis';
 import { guardRequest } from '@/lib/guardRequest';
+import { checkProductIntent } from '@/lib/ai/intentCheck';
 import type {
   SearchResult,
   SearchResultWithStore,
@@ -364,6 +365,17 @@ export async function GET(req: NextRequest) {
   if (strategy === 'near' && (userLat == null || userLng == null)) {
     return NextResponse.json(
       { error: 'Near Me strategy requires user_lat and user_lng' },
+      { status: 400 },
+    );
+  }
+
+  // ── Semantic intent check (LangChain + Redis cache) ───────────────────────
+  // Runs after regex validation (validateQuery, client-side) and guard to
+  // avoid wasting OpenAI credits on rate-limited or geo-blocked requests.
+  const isProductQuery = await checkProductIntent(query);
+  if (!isProductQuery) {
+    return NextResponse.json(
+      { error: 'That doesn\'t look like a product search. Try "חלב", "eggs", or "молоко".' },
       { status: 400 },
     );
   }
