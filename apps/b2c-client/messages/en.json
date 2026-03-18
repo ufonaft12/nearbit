@@ -16,7 +16,13 @@
     "lowestPrice": "Lowest Price",
     "initialHint": "Type at least {min} characters — or try a basket: \"{example}\"",
     "suggestionsLabel": "Quick suggestions",
-    "charCount": "{count} / {max}"
+    "charCount": "{count} / {max}",
+    "listMode": "List mode",
+    "addItemPlaceholder": "Add item...",
+    "addItemAriaLabel": "Add item to list",
+    "removeItemAriaLabel": "Remove {name} from list",
+    "backToSearch": "Back to text search",
+    "listHelpText": "Enter to add · Esc for text search"
   },
   "voice": {
     "stopListening": "Stop listening",

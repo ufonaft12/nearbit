@@ -16,7 +16,13 @@
     "lowestPrice": "הכי זול",
     "initialHint": "הקלד לפחות {min} תווים — או נסה סל: \"{example}\"",
     "suggestionsLabel": "הצעות מהירות",
-    "charCount": "{count} / {max}"
+    "charCount": "{count} / {max}",
+    "listMode": "מצב רשימה",
+    "addItemPlaceholder": "הוסף מוצר...",
+    "addItemAriaLabel": "הוסף פריט לרשימה",
+    "removeItemAriaLabel": "הסר {name} מהרשימה",
+    "backToSearch": "חזור לחיפוש רגיל",
+    "listHelpText": "Enter להוספה · Esc לחיפוש רגיל"
   },
   "voice": {
     "stopListening": "עצור האזנה",

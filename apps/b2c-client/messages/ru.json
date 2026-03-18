@@ -16,7 +16,13 @@
     "lowestPrice": "Дешевле всего",
     "initialHint": "Введите минимум {min} символа — или попробуйте корзину: \"{example}\"",
     "suggestionsLabel": "Быстрые подсказки",
-    "charCount": "{count} / {max}"
+    "charCount": "{count} / {max}",
+    "listMode": "Режим списка",
+    "addItemPlaceholder": "Добавить товар...",
+    "addItemAriaLabel": "Добавить товар в список",
+    "removeItemAriaLabel": "Убрать {name} из списка",
+    "backToSearch": "Вернуться к поиску",
+    "listHelpText": "Enter — добавить · Esc — обычный поиск"
   },
   "voice": {
     "stopListening": "Остановить запись",

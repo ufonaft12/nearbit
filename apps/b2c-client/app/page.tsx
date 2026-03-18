@@ -31,6 +31,7 @@ import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { addItem, removeItem, clearBasket, setStrategy } from '@/lib/store/basketSlice';
 import { useLocale } from '@/app/providers';
 import { BasketFloatingBar } from '@/app/components/BasketFloatingBar';
+import { ListInput } from '@/app/components/ListInput';
 import {
   type Locale,
   LOCALE_LABELS,
@@ -535,6 +536,12 @@ export default function Home() {
   const [sttLang, setSttLang]               = useState<'he-IL' | 'ru-RU' | 'en-US'>(STT_LANG[locale]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // ── List (basket) input mode ────────────────────────────────────────────────
+  // 'text'  — normal textarea (default)
+  // 'list'  — chip-based list builder (auto-activated on comma / newline)
+  const [inputMode, setInputMode]   = useState<'text' | 'list'>('text');
+  const [listItems, setListItems]   = useState<string[]>([]);
+
   // Keep sttLang in sync when user switches app language
   useEffect(() => {
     setSttLang(STT_LANG[locale]);
@@ -571,14 +578,36 @@ export default function Home() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   }, [tWa]);
 
+  // ── List-mode: keep committedQuery in sync when chips change ───────────────
+  // When items are added/removed in list mode, update the debounced query so
+  // the search re-fires automatically without requiring the user to tap Search.
+  const handleListItemsChange = useCallback(
+    (next: string[]) => {
+      setListItems(next);
+      if (next.length >= 2) {
+        const joined = next.filter((s) => s.trim().length >= 2).join(', ');
+        setCommittedQuery(joined);
+      }
+    },
+    [],
+  );
+
+  const handleBackToText = useCallback(() => {
+    setInputMode('text');
+    setListItems([]);
+    setCommittedQuery('');
+    setInputValue('');
+  }, []);
+
   // ── Basket detection ──────────────────────────────────────────────────────
-  const isBasketQuery = useMemo(() => {
+  const isBasketQueryFromText = useMemo(() => {
     const parts = committedQuery
       .split(BASKET_RE)
       .map((s) => s.trim())
       .filter((s) => s.length >= MIN_QUERY_LENGTH);
     return parts.length >= 2;
   }, [committedQuery]);
+  const isBasketQuery = inputMode === 'list' ? listItems.length >= 2 : isBasketQueryFromText;
 
   // ── Debounce ───────────────────────────────────────────────────────────────
   const debouncedCommit = useRef(
@@ -604,6 +633,23 @@ export default function Home() {
       const value = e.target.value.slice(0, MAX_QUERY_LENGTH);
       setInputValue(value);
       setValidationError(null);
+
+      // ── Auto-transform to list mode ─────────────────────────────────────
+      // Triggered when user types a comma or newline and produces ≥2 segments.
+      if (value.includes(',') || value.includes('\n')) {
+        const segments = value
+          .split(/[,،\n]/)
+          .map((s) => s.trim())
+          .filter((s) => s.length >= 2);
+        if (segments.length >= 2) {
+          setListItems(segments);
+          setInputMode('list');
+          debouncedCommit.cancel();
+          setCommittedQuery(''); // clear stale single-item query
+          return;
+        }
+      }
+
       const normalized = value.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
       debouncedCommit(normalized);
     },
@@ -612,11 +658,12 @@ export default function Home() {
 
   const executeSearch = useCallback(() => {
     debouncedCommit.cancel();
-    const trimmed = inputValue
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .join(', ');
+
+    // In list mode: join all chips as a basket query
+    const trimmed = inputMode === 'list'
+      ? listItems.filter((s) => s.trim().length >= 2).join(', ')
+      : inputValue.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
+
     if (trimmed.length < MIN_QUERY_LENGTH) return;
 
     const validation = validateQuery(trimmed);
@@ -650,7 +697,7 @@ export default function Home() {
     }
 
     setCommittedQuery(trimmed);
-  }, [inputValue, debouncedCommit, dispatch, items]);
+  }, [inputValue, inputMode, listItems, debouncedCommit, dispatch, items]);
 
   const handleSubmit = useCallback(
     (e: FormEvent) => { e.preventDefault(); executeSearch(); },
@@ -814,24 +861,33 @@ export default function Home() {
         <section>
           <form onSubmit={handleSubmit} className="flex items-start gap-2">
             <div className="relative flex-1">
-              <textarea
-                ref={textareaRef}
-                value={inputValue}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={tSearch('placeholder')}
-                dir="auto"
-                autoComplete="off"
-                spellCheck={false}
-                rows={1}
-                maxLength={MAX_QUERY_LENGTH}
-                aria-label={tSearch('ariaLabel')}
-                className="w-full resize-none overflow-hidden rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-                style={{ minHeight: '48px' }}
-              />
+              {/* ── List mode: chip builder (auto-activates on comma/newline) ── */}
+              {inputMode === 'list' ? (
+                <ListInput
+                  items={listItems}
+                  onItemsChange={handleListItemsChange}
+                  onBack={handleBackToText}
+                />
+              ) : (
+                <textarea
+                  ref={textareaRef}
+                  value={inputValue}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder={tSearch('placeholder')}
+                  dir="auto"
+                  autoComplete="off"
+                  spellCheck={false}
+                  rows={1}
+                  maxLength={MAX_QUERY_LENGTH}
+                  aria-label={tSearch('ariaLabel')}
+                  className="w-full resize-none overflow-hidden rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+                  style={{ minHeight: '48px' }}
+                />
+              )}
 
-              {/* Mic controls — pinned to bottom-right of textarea */}
-              <div className="absolute bottom-2 right-2 flex items-center gap-1">
+              {/* Mic controls — pinned to bottom-right of textarea (text mode only) */}
+              <div className={`absolute bottom-2 right-2 flex items-center gap-1 ${inputMode === 'list' ? 'hidden' : ''}`}>
                 {/* STT language cycle: HE → RU → EN → HE */}
                 <button
                   type="button"
