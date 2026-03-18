@@ -92,9 +92,63 @@ function ruleNoKeyboardSpam(q: string): ValidationResult {
     return fail('That doesn\'t look like a product name — try something like "חלב" or "milk".');
   }
   // Classic qwerty runs (5+ sequential keyboard chars)
-  if (/qwerty|asdfgh|zxcvbn|йцукен|фывапр|ячсмит/i.test(q)) {
+  if (/qwerty|asdfgh|zxcvbn|йцукен|фывапр|ячсמит/i.test(q)) {
     return fail('That looks like keyboard spam rather than a product search.');
   }
+  return PASS;
+}
+
+/**
+ * Reject obvious conversational / greeting text that is clearly not a product.
+ * Patterns cover Hebrew, Russian, and English common phrases.
+ * The check is intentionally conservative — only clear non-product sentences
+ * are blocked to avoid false-positives on legitimate product names.
+ */
+function ruleNotConversational(q: string): ValidationResult {
+  const lower = q.toLowerCase().trim();
+
+  const conversationalPatterns = [
+    // ── English ──
+    /^(?:hi|hello|hey|howdy|greetings)\b/,
+    /\bhow\s+are\s+you\b/,
+    /\bwhat(?:'s|\s+is)\s+(?:up|your\s+name|going\s+on|this|that)\b/,
+    /\bwho\s+are\s+you\b/,
+    /\btell\s+me\s+(?:about|a\s+story|something|a\s+joke)\b/,
+    /\bwhat\s+(?:do\s+you\s+think|can\s+you\s+do|is\s+the\s+weather)\b/,
+    /\bgood\s+(?:morning|evening|afternoon|night|day)\b/,
+    /\bthank\s*you\b|\bthanks\b/,
+    /\bplease\s+help\b/,
+
+    // ── Russian ──
+    /^привет\b/,
+    /^здравствуй/,
+    /^добр(?:ый|ое|ого)\s+(?:день|утро|вечер)/,
+    /\bкак\s+(?:дела|поживаешь|ты)\b/,
+    /\bчто\s+(?:такое|происходит|нового|это)\b/,
+    /\bкто\s+ты\b/,
+    /\bрасскажи\s+(?:мне|о)\b/,
+    /\bспасибо\b/,
+    /\bпомогите?\b/,
+
+    // ── Hebrew ──
+    /^שלום[\s,]+מה/,         // "שלום, מה..."
+    /\bמה\s+שלומך\b/,        // how are you
+    /\bמי\s+אתה\b/,          // who are you
+    /\bספר\s+לי\b/,          // tell me
+    /\bמה\s+אתה\b/,          // what are you
+    /\bאיך\s+אתה\b/,         // how are you (alt)
+    /\bבוקר\s+טוב\b/,        // good morning
+    /\bלילה\s+טוב\b/,        // good night
+    /\bתודה\s+רבה\b/,        // thank you
+    /\bעזור\s+לי\b/,         // help me
+  ];
+
+  for (const pattern of conversationalPatterns) {
+    if (pattern.test(lower)) {
+      return fail('That looks like a message, not a product search. Try "חלב", "eggs", or "молоко".');
+    }
+  }
+
   return PASS;
 }
 
@@ -109,6 +163,7 @@ const RULES = [
   ruleMaxItems,
   ruleItemsLookLikeProducts,
   ruleNoKeyboardSpam,
+  ruleNotConversational,
 ];
 
 /**

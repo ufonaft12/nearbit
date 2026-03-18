@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/client';
 import { getQueryEmbedding, generateSearchAnswer, generateBasketAnswer } from '@/lib/ai/openai';
 import { redis, CACHE_TTL_SECONDS, STORE_META_TTL_SECONDS } from '@/lib/redis';
+import { guardRequest } from '@/lib/guardRequest';
 import type {
   SearchResult,
   SearchResultWithStore,
@@ -340,6 +341,10 @@ function buildBasketResult(
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  // ── Security guard (rate limit + geo-block + VPN detection) ───────────────
+  const guard = await guardRequest(req);
+  if (!guard.allowed) return guard.response!;
+
   const { searchParams } = req.nextUrl;
   const query         = searchParams.get('q')?.trim();
   const storeFilter   = searchParams.get('store') ?? undefined;
