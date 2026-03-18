@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Providers } from "./providers";
+import { HtmlDirSync } from "./components/HtmlDirSync";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -54,14 +55,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // suppressHydrationWarning: next-themes modifies the class attribute
-    // after hydration to apply the correct theme; React would otherwise warn
-    // about a server/client mismatch on this element.
-    <html lang="he" suppressHydrationWarning>
+    // suppressHydrationWarning: next-themes modifies class after hydration.
+    // lang/dir are updated client-side by HtmlDirSync based on chosen locale.
+    <html lang="he" dir="rtl" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          <HtmlDirSync />
+          {children}
+        </Providers>
       </body>
     </html>
   );

@@ -1,16 +1,70 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, createContext, useContext, useCallback } from 'react';
 import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
+import { NextIntlClientProvider } from 'next-intl';
 
 import { makeStore, type AppStore } from '@/lib/store/store';
 import { hydrateBasket } from '@/lib/store/basketSlice';
+import { type Locale, LOCALE_STORAGE_KEY, detectLocale } from '@/lib/i18n/config';
+
+import heMessages from '../messages/he.json';
+import enMessages from '../messages/en.json';
+import ruMessages from '../messages/ru.json';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const BASKET_STORAGE_KEY = 'nearbit:basket';
+
+const ALL_MESSAGES = {
+  he: heMessages,
+  en: enMessages,
+  ru: ruMessages,
+} as const;
+
+// ─── Locale Context ───────────────────────────────────────────────────────────
+
+interface LocaleContextType {
+  locale: Locale;
+  setLocale: (l: Locale) => void;
+}
+
+const LocaleContext = createContext<LocaleContextType>({
+  locale: 'he',
+  setLocale: () => {},
+});
+
+export function useLocale() {
+  return useContext(LocaleContext);
+}
+
+// ─── LocaleProvider ───────────────────────────────────────────────────────────
+
+function LocaleProvider({ children }: { children: React.ReactNode }) {
+  // SSR default = 'he' (Israel-first); client detects real locale on mount.
+  const [locale, setLocaleState] = useState<Locale>('he');
+
+  useEffect(() => {
+    setLocaleState(detectLocale());
+  }, []);
+
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l);
+    try {
+      localStorage.setItem(LOCALE_STORAGE_KEY, l);
+    } catch { /* localStorage blocked */ }
+  }, []);
+
+  return (
+    <LocaleContext.Provider value={{ locale, setLocale }}>
+      <NextIntlClientProvider locale={locale} messages={ALL_MESSAGES[locale]}>
+        {children}
+      </NextIntlClientProvider>
+    </LocaleContext.Provider>
+  );
+}
 
 // ─── StoreProvider ────────────────────────────────────────────────────────────
 
@@ -100,11 +154,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       disableTransitionOnChange — prevents flash of unstyled transitions
     */
     <ThemeProvider attribute="class" defaultTheme="system" disableTransitionOnChange>
-      <StoreProvider>
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      </StoreProvider>
+      <LocaleProvider>
+        <StoreProvider>
+          <QueryClientProvider client={queryClient}>
+            {children}
+          </QueryClientProvider>
+        </StoreProvider>
+      </LocaleProvider>
     </ThemeProvider>
   );
 }

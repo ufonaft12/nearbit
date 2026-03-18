@@ -1,0 +1,91 @@
+{
+  "header": {
+    "tagline": "/ local store search"
+  },
+  "theme": {
+    "toLightMode": "Switch to light mode",
+    "toDarkMode": "Switch to dark mode"
+  },
+  "search": {
+    "placeholder": "Search products... (milk, eggs, hummus)\nor enter each product on a new line",
+    "ariaLabel": "Search products",
+    "helpText": "Enter to search · Shift+Enter for new line · Voice",
+    "button": "Search",
+    "basketMode": "Basket mode — comparing prices across stores",
+    "nearMe": "Near Me",
+    "lowestPrice": "Lowest Price",
+    "initialHint": "Type at least {min} characters — or try a basket: \"{example}\"",
+    "suggestionsLabel": "Quick suggestions",
+    "charCount": "{count} / {max}"
+  },
+  "voice": {
+    "stopListening": "Stop listening",
+    "startListening": "Start voice input",
+    "listeningTitle": "Listening… (click to stop)",
+    "voiceTitle": "Voice input",
+    "langTitle": "Voice: {lang} — click to switch",
+    "he": "Hebrew",
+    "ru": "Russian",
+    "en": "English"
+  },
+  "location": {
+    "ariaLabel": "Share location",
+    "active": "Location active — click to refresh",
+    "denied": "Blocked — enable location in browser settings",
+    "unavailable": "Geolocation not supported by this browser",
+    "requesting": "Requesting location…",
+    "idle": "Share my location for closer results"
+  },
+  "results": {
+    "ariaLabel": "Search results",
+    "assistant": "Assistant",
+    "share": "Share",
+    "shareAriaLabel": "Share answer on WhatsApp",
+    "resultsCount": "{count, plural, one {# result} other {# results}} for \"{query}\"",
+    "productListAriaLabel": "Product results",
+    "noResults": "No products found",
+    "noResultsTip": "Try a different search term, or run <cmd>npm run seed</cmd> to populate the database.",
+    "loading": "Loading results"
+  },
+  "product": {
+    "addToBasket": "Add {name} to basket",
+    "removeFromBasket": "Remove {name} from basket",
+    "share": "Share",
+    "shareAriaLabel": "Share {name} on WhatsApp",
+    "openInWaze": "Open {store} in Waze",
+    "openInMaps": "Open {store} in Google Maps",
+    "lowStock": "{qty} left!",
+    "outOfStock": "Out of stock",
+    "match": "{score}% match",
+    "priceSame": "→ Same price"
+  },
+  "basket": {
+    "mode": "Basket Mode",
+    "maxSavings": "Max savings",
+    "shareBasketSummary": "Share basket",
+    "itemsFound": "{found}/{total} items",
+    "adding": "Adding \"{label}\" to basket…",
+    "itemCount": "{count, plural, one {# item in basket} other {# items in basket}}",
+    "estimated": "Estimated:",
+    "stores": "{count} stores",
+    "clearAll": "Clear all",
+    "removeItem": "Remove {name} from basket",
+    "chooseStore": "Choose store to navigate to",
+    "waze": "Yalla! Waze",
+    "shareWhatsApp": "Share basket"
+  },
+  "errors": {
+    "connectionTitle": "Connection error",
+    "connectionMessage": "Could not reach the server. Check your connection and try again.",
+    "searchFailed": "Search failed. Please try again."
+  },
+  "whatsapp": {
+    "productText": "Hey, check what I found on Nearbit! 🛒\n{name} – {price}\n📍 {store}\nGreat deal! 🤩",
+    "answerText": "Hey, I asked Nearbit about \"{query}\" and here's what I found:\n\n{answer}\n\n🛒 nearbit.app",
+    "basketHeader": "Hey, here's my basket from Nearbit 🛒",
+    "basketTotal": "💰 Total: ₪{total}",
+    "basketFooter": "Awesome! 🤩",
+    "basketBestDeal": "Hey, I found the best basket deal on Nearbit! 🧺\n{items}\n🏆 {store}: ₪{total}\nCool! 🤩",
+    "basketFallback": "Found basket \"{query}\" on Nearbit 🛒"
+  }
+}

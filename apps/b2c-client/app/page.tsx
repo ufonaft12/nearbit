@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
+import { useTranslations } from 'next-intl';
 import debounce from 'lodash/debounce';
 import throttle from 'lodash/throttle';
 
@@ -28,14 +29,21 @@ import { fetchSearch, SearchError, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH } from '@/
 import { validateQuery } from '@/lib/validateQuery';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { addItem, removeItem, clearBasket, setStrategy } from '@/lib/store/basketSlice';
+import { useLocale } from '@/app/providers';
 import { BasketFloatingBar } from '@/app/components/BasketFloatingBar';
+import {
+  type Locale,
+  LOCALE_LABELS,
+  LOCALES,
+  SUGGESTIONS_BY_LOCALE,
+  STT_LANG,
+} from '@/lib/i18n/config';
 import type { SearchResultWithStore, BasketResult, BasketItem, SearchStrategy } from '@/types/nearbit';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 400;
 const THROTTLE_MS = 800;
-const SUGGESTIONS = ['חומוס', 'חלב', 'לחם', 'ביצים', 'שוקולד', 'במבה'] as const;
 const BASKET_RE   = /[,،]|\s+(?:and|ו|או|и|или)\s+/gi;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,19 +54,7 @@ function vibrate(pattern: number | number[]) {
   }
 }
 
-function shareProductToWhatsApp(r: SearchResultWithStore) {
-  const price = r.price != null ? `${r.price.toFixed(2)} ₪` : 'מחיר לא ידוע';
-  const text  = `אחי, תראה מה מצאתי ב-Nearbit! 🛒\n${r.nameHe ?? r.normalizedName} – ${price}\n📍 ${r.storeName}\nסבבה דיל! 🤩`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-}
-
-function shareAnswerToWhatsApp(answer: string, query: string) {
-  const text = `אחי, שאלתי את Nearbit על "${query}" והנה מה שמצאתי:\n\n${answer}\n\n🛒 nearbit.app`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-}
-
 function openInWaze(storeName: string, lat?: number | null, lng?: number | null) {
-  // Use != null (not &&) so that lat/lng = 0 is still treated as a valid coordinate
   const url =
     lat != null && lng != null
       ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
@@ -111,38 +107,17 @@ function parseBasketCommand(input: string): BasketCommand | null {
 }
 
 /**
- * Price-trend helper.
- * Returns null when no previousPrice is available (future DB column).
+ * Price-trend helper. Returns null when no previousPrice is available.
  */
 function getPriceTrend(
   current: number | null,
   previous?: number | null,
-): { type: 'up' | 'down' | 'same'; label: string } | null {
+): { type: 'up' | 'down' | 'same'; delta: number } | null {
   if (current == null || previous == null) return null;
   const delta = current - previous;
-  if (Math.abs(delta) < 0.005) return { type: 'same', label: '→ Same price' };
-  if (delta < 0)               return { type: 'down', label: `↓ ₪${Math.abs(delta).toFixed(2)}` };
-  return                              { type: 'up',   label: `↑ ₪${delta.toFixed(2)}` };
-}
-
-// ─── ThemeToggle ──────────────────────────────────────────────────────────────
-
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return <span className="inline-block w-9 h-9" />;
-
-  const isDark = resolvedTheme === 'dark';
-  return (
-    <button
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="rounded-xl p-2 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-    >
-      {isDark ? <Sun size={20} /> : <Moon size={20} />}
-    </button>
-  );
+  if (Math.abs(delta) < 0.005) return { type: 'same', delta: 0 };
+  if (delta < 0)               return { type: 'down', delta };
+  return                              { type: 'up',   delta };
 }
 
 // ─── WhatsApp icon ────────────────────────────────────────────────────────────
@@ -186,6 +161,53 @@ function SkeletonCard() {
   );
 }
 
+// ─── ThemeToggle ──────────────────────────────────────────────────────────────
+
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const t = useTranslations('theme');
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <span className="inline-block w-9 h-9" />;
+
+  const isDark = resolvedTheme === 'dark';
+  return (
+    <button
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      aria-label={isDark ? t('toLightMode') : t('toDarkMode')}
+      className="rounded-xl p-2 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+    >
+      {isDark ? <Sun size={20} /> : <Moon size={20} />}
+    </button>
+  );
+}
+
+// ─── LanguageSwitcher ─────────────────────────────────────────────────────────
+
+function LanguageSwitcher() {
+  const { locale, setLocale } = useLocale();
+
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5">
+      {LOCALES.map((l: Locale) => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => setLocale(l)}
+          aria-pressed={locale === l}
+          className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
+            locale === l
+              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-50 shadow-sm'
+              : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+          }`}
+        >
+          {LOCALE_LABELS[l]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ─── DirectionsButtons ────────────────────────────────────────────────────────
 
 interface DirectionProps {
@@ -195,12 +217,13 @@ interface DirectionProps {
 }
 
 const DirectionsButtons = memo(function DirectionsButtons({ storeName, storeLat, storeLng }: DirectionProps) {
+  const t = useTranslations('product');
   return (
     <div className="flex items-center gap-1 mt-1">
       <button
         type="button"
         onClick={() => openInWaze(storeName, storeLat, storeLng)}
-        aria-label={`Open ${storeName} in Waze`}
+        aria-label={t('openInWaze', { store: storeName })}
         className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
       >
         <Navigation size={11} /> Waze
@@ -209,7 +232,7 @@ const DirectionsButtons = memo(function DirectionsButtons({ storeName, storeLat,
       <button
         type="button"
         onClick={() => openInMaps(storeName, storeLat, storeLng)}
-        aria-label={`Open ${storeName} in Google Maps`}
+        aria-label={t('openInMaps', { store: storeName })}
         className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
       >
         <MapIcon size={11} /> Maps
@@ -227,13 +250,27 @@ const BasketSummaryCard = memo(function BasketSummaryCard({
   basket: BasketResult;
   query:  string;
 }) {
+  const tBasket = useTranslations('basket');
+  const tWa     = useTranslations('whatsapp');
+
+  const shareBasket = () => {
+    const text = basket.storeOptions[0]
+      ? tWa('basketBestDeal', {
+          items: basket.items.join(', '),
+          store: basket.storeOptions[0].storeName,
+          total: basket.storeOptions[0].totalCost.toFixed(2),
+        })
+      : tWa('basketFallback', { query });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  };
+
   return (
     <div className="rounded-xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-5 py-4">
       {/* Header */}
       <div className="flex items-start justify-between mb-3 gap-2">
         <div>
           <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-            <ShoppingBasket size={13} /> Basket Mode
+            <ShoppingBasket size={13} /> {tBasket('mode')}
           </span>
           <p className="mt-0.5 text-sm text-amber-800 dark:text-amber-300 truncate max-w-xs">
             {basket.items.join(' · ')}
@@ -241,7 +278,9 @@ const BasketSummaryCard = memo(function BasketSummaryCard({
         </div>
         {basket.savings > 0.5 && (
           <div className="text-right shrink-0">
-            <p className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">Max savings</p>
+            <p className="text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">
+              {tBasket('maxSavings')}
+            </p>
             <p className="text-xl font-bold text-green-700 dark:text-green-400">
               ₪{basket.savings.toFixed(2)}
             </p>
@@ -252,16 +291,11 @@ const BasketSummaryCard = memo(function BasketSummaryCard({
       {/* Share basket summary */}
       <button
         type="button"
-        onClick={() => {
-          const text = basket.storeOptions[0]
-            ? `אחי, מצאתי את הסל הכי משתלם ב-Nearbit! 🧺\n${basket.items.join(', ')}\n🏆 ${basket.storeOptions[0].storeName}: ₪${basket.storeOptions[0].totalCost.toFixed(2)}\nסבבה! 🤩`
-            : `Found basket "${query}" on Nearbit 🛒`;
-          window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-        }}
+        onClick={shareBasket}
         className="mb-3 flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-500 hover:text-green-700 transition-colors"
       >
         <WhatsAppIcon />
-        שתף את הסל
+        {tBasket('shareBasketSummary')}
       </button>
 
       {/* Store comparison rows */}
@@ -282,7 +316,7 @@ const BasketSummaryCard = memo(function BasketSummaryCard({
                   {s.storeName}
                 </p>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {s.itemsFound}/{s.totalItems} items
+                  {tBasket('itemsFound', { found: s.itemsFound, total: s.totalItems })}
                 </p>
                 <div className="flex flex-wrap gap-1 mt-0.5">
                   {s.items.map((it) => (
@@ -327,6 +361,9 @@ interface ProductCardProps {
 }
 
 const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket, onAdd, onRemove }: ProductCardProps) {
+  const t  = useTranslations('product');
+  const tWa = useTranslations('whatsapp');
+
   const subtitle = useMemo(
     () => [r.nameEn, r.category, r.unit].filter(Boolean).join(' · '),
     [r.nameEn, r.category, r.unit],
@@ -334,14 +371,15 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
 
   const trend = getPriceTrend(r.price, r.previousPrice);
 
-  // Scarcity thresholds
   const isLowStock   = r.quantity != null && r.quantity > 0 && r.quantity < 5;
   const isOutOfStock = r.quantity === 0;
+
+  const productName = r.nameHe ?? r.normalizedName;
 
   const basketItem = useMemo<BasketItem>(
     () => ({
       id:        r.id,
-      name:      r.nameHe ?? r.normalizedName,
+      name:      productName,
       price:     r.price,
       storeName: r.storeName,
       storeId:   r.storeId,
@@ -350,8 +388,23 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
       storeLng:  r.storeLng,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [r.id, r.nameHe, r.normalizedName, r.price, r.storeName, r.storeId, searchQuery, r.storeLat, r.storeLng],
+    [r.id, productName, r.price, r.storeName, r.storeId, searchQuery, r.storeLat, r.storeLng],
   );
+
+  const shareOnWhatsApp = () => {
+    const price = r.price != null ? `${r.price.toFixed(2)} ₪` : '—';
+    const text  = tWa('productText', { name: productName, price, store: r.storeName });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  };
+
+  // Price trend label
+  const trendLabel = trend
+    ? trend.type === 'same'
+      ? t('priceSame')
+      : trend.type === 'down'
+      ? `↓ ₪${Math.abs(trend.delta).toFixed(2)}`
+      : `↑ ₪${trend.delta.toFixed(2)}`
+    : null;
 
   return (
     <li
@@ -366,7 +419,7 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
         type="button"
         role="checkbox"
         aria-checked={inBasket}
-        aria-label={inBasket ? `Remove ${r.nameHe ?? r.normalizedName} from basket` : `Add ${r.nameHe ?? r.normalizedName} to basket`}
+        aria-label={inBasket ? t('removeFromBasket', { name: productName }) : t('addToBasket', { name: productName })}
         onClick={() => { inBasket ? onRemove(r.id) : onAdd(basketItem); vibrate(20); }}
         className={`mt-0.5 shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
           inBasket
@@ -386,9 +439,9 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
         <span
           className="font-medium text-zinc-900 dark:text-zinc-50 truncate"
           dir="rtl"
-          title={r.nameHe ?? r.normalizedName}
+          title={productName}
         >
-          {r.nameHe ?? r.normalizedName}
+          {productName}
         </span>
 
         {subtitle && (
@@ -402,12 +455,12 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
           <DirectionsButtons storeName={r.storeName} storeLat={r.storeLat} storeLng={r.storeLng} />
           <button
             type="button"
-            onClick={() => shareProductToWhatsApp(r)}
-            aria-label={`Share ${r.nameHe ?? r.normalizedName} on WhatsApp`}
+            onClick={shareOnWhatsApp}
+            aria-label={t('shareAriaLabel', { name: productName })}
             className="flex items-center gap-1 text-xs text-green-600 dark:text-green-500 hover:text-green-700 dark:hover:text-green-400 transition-colors"
           >
             <WhatsAppIcon />
-            <span>שתף</span>
+            <span>{t('share')}</span>
           </button>
         </div>
       </div>
@@ -420,16 +473,15 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
           </span>
         )}
 
-        {/* Price trend (renders when previousPrice is available) */}
-        {trend && (
+        {trendLabel && (
           <span
             className={`text-[11px] font-medium ${
-              trend.type === 'down' ? 'text-green-600 dark:text-green-400' :
-              trend.type === 'up'   ? 'text-red-500  dark:text-red-400'   :
-                                      'text-zinc-400'
+              trend?.type === 'down' ? 'text-green-600 dark:text-green-400' :
+              trend?.type === 'up'   ? 'text-red-500  dark:text-red-400'   :
+                                       'text-zinc-400'
             }`}
           >
-            {trend.label}
+            {trendLabel}
           </span>
         )}
 
@@ -440,20 +492,19 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
           </span>
         )}
 
-        {/* Scarcity alert */}
         {isLowStock && (
           <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-orange-600 dark:text-orange-400">
-            <AlertTriangle size={11} /> {r.quantity} left!
+            <AlertTriangle size={11} /> {t('lowStock', { qty: r.quantity ?? 0 })}
           </span>
         )}
         {isOutOfStock && (
           <span className="text-[11px] font-semibold text-red-500 dark:text-red-400">
-            Out of stock
+            {t('outOfStock')}
           </span>
         )}
 
         <span className="text-[11px] text-zinc-400">
-          {(r.similarity * 100).toFixed(0)}% match
+          {t('match', { score: (r.similarity * 100).toFixed(0) })}
         </span>
       </div>
     </li>
@@ -465,31 +516,42 @@ const ProductCard = memo(function ProductCard({ result: r, searchQuery, inBasket
 type LocStatus = 'idle' | 'requesting' | 'active' | 'denied' | 'unavailable';
 
 export default function Home() {
+  const tSearch   = useTranslations('search');
+  const tVoice    = useTranslations('voice');
+  const tLocation = useTranslations('location');
+  const tResults  = useTranslations('results');
+  const tErrors   = useTranslations('errors');
+  const tWa       = useTranslations('whatsapp');
+  const tHeader   = useTranslations('header');
+
+  const { locale } = useLocale();
+  const suggestions = SUGGESTIONS_BY_LOCALE[locale];
+
   const [inputValue, setInputValue]         = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
   const [userLocation, setUserLocation]     = useState<{ lat: number; lng: number } | null>(null);
   const [locStatus, setLocStatus]           = useState<LocStatus>('idle');
   const [isListening, setIsListening]       = useState(false);
-  const [sttLang, setSttLang]               = useState<'he-IL' | 'ru-RU' | 'en-US'>('he-IL');
+  const [sttLang, setSttLang]               = useState<'he-IL' | 'ru-RU' | 'en-US'>(STT_LANG[locale]);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Keep sttLang in sync when user switches app language
+  useEffect(() => {
+    setSttLang(STT_LANG[locale]);
+  }, [locale]);
 
   const dispatch = useAppDispatch();
   const { items, strategy } = useAppSelector((s) => s.basket);
   const hasItem = useCallback((id: string) => items.some((i) => i.id === id), [items]);
 
-  // Stable dispatch wrappers — passed as props to memo(ProductCard)
   const handleAddItem    = useCallback((item: BasketItem) => dispatch(addItem(item)),    [dispatch]);
   const handleRemoveItem = useCallback((id: string)      => dispatch(removeItem(id)),    [dispatch]);
 
-  // Throttled strategy toggle — prevents rapid-fire duplicate queries (leading edge, 400 ms)
   const throttledSetStrategy = useRef(
     throttle((s: SearchStrategy) => dispatch(setStrategy(s)), 400, { leading: true, trailing: false }),
   ).current;
 
-  // Ref used to auto-add the top result after an "Add X" voice command fires a search
   const pendingAutoAddQueryRef = useRef<string | null>(null);
-
-  // Visible "Adding [item]…" label shown in the floating bar during a silent add-search
   const [pendingAddLabel, setPendingAddLabel] = useState<string | null>(null);
 
   const resultsAnchorRef  = useRef<HTMLDivElement>(null);
@@ -497,13 +559,25 @@ export default function Home() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef    = useRef<any>(null);
 
-  // ── Basket detection (client-side, mirrors server logic) ──────────────────
+  // ── Share helpers (inside component to access t()) ─────────────────────────
+  const shareProductToWhatsApp = useCallback((r: SearchResultWithStore) => {
+    const price = r.price != null ? `${r.price.toFixed(2)} ₪` : '—';
+    const text  = tWa('productText', { name: r.nameHe ?? r.normalizedName, price, store: r.storeName });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  }, [tWa]);
+
+  const shareAnswerToWhatsApp = useCallback((answer: string, query: string) => {
+    const text = tWa('answerText', { query, answer });
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  }, [tWa]);
+
+  // ── Basket detection ──────────────────────────────────────────────────────
   const isBasketQuery = useMemo(() => {
-    const items = committedQuery
+    const parts = committedQuery
       .split(BASKET_RE)
       .map((s) => s.trim())
       .filter((s) => s.length >= MIN_QUERY_LENGTH);
-    return items.length >= 2;
+    return parts.length >= 2;
   }, [committedQuery]);
 
   // ── Debounce ───────────────────────────────────────────────────────────────
@@ -530,17 +604,14 @@ export default function Home() {
       const value = e.target.value.slice(0, MAX_QUERY_LENGTH);
       setInputValue(value);
       setValidationError(null);
-      // Normalize newlines → ", " so the basket regex fires on multi-line input
       const normalized = value.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
       debouncedCommit(normalized);
     },
     [debouncedCommit],
   );
 
-  // Core search logic — called from both form submit and Enter key
   const executeSearch = useCallback(() => {
     debouncedCommit.cancel();
-    // Join multiple lines with ", " so the basket regex fires correctly
     const trimmed = inputValue
       .split('\n')
       .map((l) => l.trim())
@@ -548,7 +619,6 @@ export default function Home() {
       .join(', ');
     if (trimmed.length < MIN_QUERY_LENGTH) return;
 
-    // ── Validate before hitting the API ────────────────────────────────────
     const validation = validateQuery(trimmed);
     if (!validation.ok) {
       setValidationError(validation.reason ?? 'Invalid search query.');
@@ -597,11 +667,11 @@ export default function Home() {
     [executeSearch],
   );
 
-  // ── Voice input (Web Speech API) ────────────────────────────────────────────
+  // ── Voice input ────────────────────────────────────────────────────────────
   const handleMic = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (!SR) return; // browser doesn't support STT
+    if (!SR) return;
 
     if (isListening) {
       recognitionRef.current?.stop();
@@ -622,8 +692,8 @@ export default function Home() {
     rec.onresult = (event: any) => {
       const transcript: string = event.results[0][0].transcript;
       setInputValue((prev) => {
-        const next    = prev ? `${prev}\n${transcript}` : transcript;
-        const sliced  = next.slice(0, MAX_QUERY_LENGTH);
+        const next       = prev ? `${prev}\n${transcript}` : transcript;
+        const sliced     = next.slice(0, MAX_QUERY_LENGTH);
         const normalized = sliced.split('\n').map((l: string) => l.trim()).filter(Boolean).join(', ');
         debouncedCommit(normalized);
         return sliced;
@@ -647,7 +717,6 @@ export default function Home() {
   );
 
   // ── Geolocation ───────────────────────────────────────────────────────────
-  // Throttled at 3 s (leading) — prevents rapid re-firing when already active
   const requestLocation = useRef(
     throttle(
       () => {
@@ -661,8 +730,6 @@ export default function Home() {
             vibrate([30, 50, 30]);
           },
           (err) => {
-            // PERMISSION_DENIED (1) — user explicitly blocked; show MapPinOff
-            // POSITION_UNAVAILABLE (2) / TIMEOUT (3) — transient; let user retry
             setLocStatus(err.code === 1 ? 'denied' : 'idle');
           },
           { timeout: 10_000 },
@@ -681,13 +748,12 @@ export default function Home() {
     enabled:  committedQuery.length >= MIN_QUERY_LENGTH,
   });
 
-  // ── Haptic + scroll-to-results when data lands ────────────────────────────
+  // ── Haptic + scroll + auto-add ─────────────────────────────────────────────
   useEffect(() => {
     if (!data) return;
     vibrate(50);
     resultsAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    // Auto-add top result when triggered by an "Add X" basket command
     const pendingQuery = pendingAutoAddQueryRef.current;
     if (pendingQuery && data.results.length > 0) {
       const top = data.results[0];
@@ -703,11 +769,9 @@ export default function Home() {
       }));
       pendingAutoAddQueryRef.current = null;
     }
-    // Always clear the loading label when the search completes
     setPendingAddLabel(null);
   }, [data, dispatch]);
 
-  // Clear pending-add label if the search failed (prevents spinner getting stuck)
   useEffect(() => {
     if (isError) {
       pendingAutoAddQueryRef.current = null;
@@ -721,6 +785,9 @@ export default function Home() {
   const showInitialHint = !isFetching && !isSuccess && !isError;
   const nearLimit       = inputValue.length > MAX_QUERY_LENGTH * 0.8;
 
+  // STT language display name
+  const sttLangName = sttLang === 'he-IL' ? tVoice('he') : sttLang === 'ru-RU' ? tVoice('ru') : tVoice('en');
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans">
@@ -732,9 +799,12 @@ export default function Home() {
             <span className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               Nearbit
             </span>
-            <span className="text-sm text-zinc-400 hidden sm:inline">/ local store search</span>
+            <span className="text-sm text-zinc-400 hidden sm:inline">{tHeader('tagline')}</span>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -743,44 +813,42 @@ export default function Home() {
         {/* ── Search box ── */}
         <section>
           <form onSubmit={handleSubmit} className="flex items-start gap-2">
-            {/* Textarea + mic in a relative wrapper */}
             <div className="relative flex-1">
               <textarea
                 ref={textareaRef}
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder={`חפש מוצר... (חלב, ביצים, חומוס)\nאו רשום כל מוצר בשורה חדשה`}
+                placeholder={tSearch('placeholder')}
                 dir="auto"
                 autoComplete="off"
                 spellCheck={false}
                 rows={1}
                 maxLength={MAX_QUERY_LENGTH}
-                aria-label="Search products"
+                aria-label={tSearch('ariaLabel')}
                 className="w-full resize-none overflow-hidden rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
                 style={{ minHeight: '48px' }}
               />
 
               {/* Mic controls — pinned to bottom-right of textarea */}
               <div className="absolute bottom-2 right-2 flex items-center gap-1">
-                {/* Language cycle: HE → RU → EN → HE */}
+                {/* STT language cycle: HE → RU → EN → HE */}
                 <button
                   type="button"
                   onClick={() => setSttLang((l) =>
                     l === 'he-IL' ? 'ru-RU' : l === 'ru-RU' ? 'en-US' : 'he-IL'
                   )}
-                  title={`Voice: ${sttLang === 'he-IL' ? 'Hebrew' : sttLang === 'ru-RU' ? 'Russian' : 'English'} — click to switch`}
+                  title={tVoice('langTitle', { lang: sttLangName })}
                   className="rounded px-1.5 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   {sttLang === 'he-IL' ? 'HE' : sttLang === 'ru-RU' ? 'RU' : 'EN'}
                 </button>
 
-                {/* Mic button */}
                 <button
                   type="button"
                   onClick={handleMic}
-                  aria-label={isListening ? 'Stop listening' : 'Start voice input'}
-                  title={isListening ? 'Listening… (click to stop)' : 'Voice input'}
+                  aria-label={isListening ? tVoice('stopListening') : tVoice('startListening')}
+                  title={isListening ? tVoice('listeningTitle') : tVoice('voiceTitle')}
                   className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors ${
                     isListening
                       ? 'text-red-500 bg-red-50 dark:bg-red-950/30 animate-pulse'
@@ -802,7 +870,7 @@ export default function Home() {
               >
                 {isFetching
                   ? <Loader2 size={16} className="animate-spin" />
-                  : <><SearchIcon size={15} /> Search</>
+                  : <><SearchIcon size={15} /> {tSearch('button')}</>
                 }
               </button>
 
@@ -811,13 +879,13 @@ export default function Home() {
                 onClick={requestLocation}
                 disabled={locStatus === 'requesting' || locStatus === 'denied' || locStatus === 'unavailable'}
                 title={
-                  locStatus === 'active'      ? 'Location active — click to refresh'         :
-                  locStatus === 'denied'      ? 'Blocked — enable location in browser settings' :
-                  locStatus === 'unavailable' ? 'Geolocation not supported by this browser'  :
-                  locStatus === 'requesting'  ? 'Requesting location…'                       :
-                  'Share my location for closer results'
+                  locStatus === 'active'      ? tLocation('active')      :
+                  locStatus === 'denied'      ? tLocation('denied')      :
+                  locStatus === 'unavailable' ? tLocation('unavailable') :
+                  locStatus === 'requesting'  ? tLocation('requesting')  :
+                  tLocation('idle')
                 }
-                aria-label="Share location"
+                aria-label={tLocation('ariaLabel')}
                 className={`flex items-center justify-center rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-40 ${
                   locStatus === 'active'
                     ? 'border-green-400 text-green-500 bg-green-50 dark:bg-green-950/30'
@@ -837,7 +905,7 @@ export default function Home() {
           </form>
 
           <p className="mt-1 text-xs text-zinc-400">
-            Enter לחיפוש · Shift+Enter לשורה חדשה · <Mic className="inline mb-0.5" size={11} /> קול (HE / RU / EN)
+            {tSearch('helpText')} <Mic className="inline mb-0.5" size={11} /> (HE / RU / EN)
           </p>
 
           {/* Validation error */}
@@ -850,14 +918,14 @@ export default function Home() {
 
           {nearLimit && (
             <p className="mt-0.5 text-right text-xs text-zinc-400">
-              {inputValue.length} / {MAX_QUERY_LENGTH}
+              {tSearch('charCount', { count: inputValue.length, max: MAX_QUERY_LENGTH })}
             </p>
           )}
 
           {/* Basket mode indicator */}
           {isBasketQuery && (
             <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-              <ShoppingBasket size={13} /> Basket mode — comparing prices across stores
+              <ShoppingBasket size={13} /> {tSearch('basketMode')}
             </p>
           )}
 
@@ -873,7 +941,7 @@ export default function Home() {
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
                 }`}
               >
-                <MapPin size={12} /> Near Me
+                <MapPin size={12} /> {tSearch('nearMe')}
               </button>
               <button
                 type="button"
@@ -884,14 +952,14 @@ export default function Home() {
                     : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
                 }`}
               >
-                <Coins size={12} /> Lowest Price
+                <Coins size={12} /> {tSearch('lowestPrice')}
               </button>
             </div>
           )}
 
           {/* Suggestion chips */}
-          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Quick suggestions">
-            {SUGGESTIONS.map((s) => (
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={tSearch('suggestionsLabel')}>
+            {suggestions.map((s) => (
               <button
                 key={s}
                 type="button"
@@ -907,16 +975,16 @@ export default function Home() {
         {/* ── Initial hint ── */}
         {showInitialHint && (
           <p className="text-center text-sm text-zinc-400">
-            Type at least {MIN_QUERY_LENGTH} characters — or try a basket: "חלב, ביצים, חומוס"
+            {tSearch('initialHint', { min: MIN_QUERY_LENGTH, example: suggestions.slice(0, 3).join(', ') })}
           </p>
         )}
 
         {/* ── Network error ── */}
         {isNetworkError && (
           <div role="alert" className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3">
-            <p className="text-sm font-medium text-red-700 dark:text-red-400">Connection error</p>
+            <p className="text-sm font-medium text-red-700 dark:text-red-400">{tErrors('connectionTitle')}</p>
             <p className="mt-0.5 text-sm text-red-600/80 dark:text-red-400/80">
-              Could not reach the server. Check your connection and try again.
+              {tErrors('connectionMessage')}
             </p>
           </div>
         )}
@@ -924,13 +992,13 @@ export default function Home() {
         {/* ── API error ── */}
         {isError && !isNetworkError && (
           <div role="alert" className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-            {error instanceof Error ? error.message : 'Search failed. Please try again.'}
+            {error instanceof Error ? error.message : tErrors('searchFailed')}
           </div>
         )}
 
-        {/* ── Skeleton loaders (shimmer) ── */}
+        {/* ── Skeleton loaders ── */}
         {isFetching && (
-          <div aria-busy="true" aria-label="Loading results" className="flex flex-col gap-3">
+          <div aria-busy="true" aria-label={tResults('loading')} className="flex flex-col gap-3">
             <SkeletonAnswer />
             <ul className="flex flex-col gap-2">
               {[0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)}
@@ -938,27 +1006,27 @@ export default function Home() {
           </div>
         )}
 
-        {/* Invisible scroll anchor — positioned just above the results */}
+        {/* Invisible scroll anchor */}
         <div ref={resultsAnchorRef} className="-mt-4" aria-hidden="true" />
 
         {/* ── Results ── */}
         {!isFetching && isSuccess && (
-          <section aria-label="Search results" className="flex flex-col gap-4">
+          <section aria-label={tResults('ariaLabel')} className="flex flex-col gap-4">
 
             {/* LLM answer card */}
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-4">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  Assistant
+                  {tResults('assistant')}
                 </p>
                 <button
                   type="button"
                   onClick={() => shareAnswerToWhatsApp(data.answer, committedQuery)}
-                  aria-label="Share answer on WhatsApp"
+                  aria-label={tResults('shareAriaLabel')}
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-green-600 dark:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors"
                 >
                   <WhatsAppIcon />
-                  שתף
+                  {tResults('share')}
                 </button>
               </div>
               <p className="text-base leading-relaxed text-zinc-800 dark:text-zinc-200" dir="auto">
@@ -966,7 +1034,7 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Basket summary (only for multi-item searches) */}
+            {/* Basket summary */}
             {data.basket && (
               <BasketSummaryCard basket={data.basket} query={committedQuery} />
             )}
@@ -975,10 +1043,9 @@ export default function Home() {
             {hasResults ? (
               <>
                 <p className="px-1 text-xs text-zinc-400">
-                  {data.results.length} result{data.results.length !== 1 ? 's' : ''}{' '}
-                  for &ldquo;{committedQuery}&rdquo;
+                  {tResults('resultsCount', { count: data.results.length, query: committedQuery })}
                 </p>
-                <ul className="flex flex-col gap-2" role="list" aria-label="Product results">
+                <ul className="flex flex-col gap-2" role="list" aria-label={tResults('productListAriaLabel')}>
                   {data.results.map((r) => (
                     <ProductCard
                       key={r.id}
@@ -995,14 +1062,16 @@ export default function Home() {
               <div className="flex flex-col items-center gap-2 py-8 text-zinc-400">
                 <SearchIcon size={36} aria-hidden="true" />
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                  No products found
+                  {tResults('noResults')}
                 </p>
                 <p className="max-w-xs text-center text-xs">
-                  Try a different search term, or run{' '}
-                  <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 font-mono">
-                    npm run seed
-                  </code>{' '}
-                  to populate the database.
+                  {tResults.rich('noResultsTip', {
+                    cmd: (chunks) => (
+                      <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 font-mono">
+                        {chunks}
+                      </code>
+                    ),
+                  })}
                 </p>
               </div>
             )}
@@ -1011,7 +1080,7 @@ export default function Home() {
 
       </main>
 
-      {/* Floating basket bar — renders when basket has items */}
+      {/* Floating basket bar */}
       <BasketFloatingBar pendingAddLabel={pendingAddLabel} />
     </div>
   );
