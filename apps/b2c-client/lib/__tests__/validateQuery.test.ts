@@ -195,14 +195,36 @@ describe('validateQuery', () => {
     expect(validateQuery('חלב 3%').ok).toBe(true);
   });
 
-  // ── Known limitation: \b boundaries don't work for Cyrillic/Hebrew only strings ──
-  // The conversational rule patterns use \b which relies on ASCII word boundaries.
-  // Pure Cyrillic/Hebrew text has no ASCII word chars, so \b never matches.
-  // These are documented as known edge cases, not enforced in production.
-  it('(known) Russian "привет" may pass through conversational filter due to \\b limitation', () => {
-    // This documents the known behavior — not a bug we're fixing here
-    const result = validateQuery('привет');
-    // Either ok or not, we just verify it doesn't throw
-    expect(typeof result.ok).toBe('boolean');
+  // ── Cyrillic/Hebrew conversational phrases (Unicode-safe boundaries) ──
+  it('rejects Russian greeting "привет" alone', () => {
+    expect(validateQuery('привет').ok).toBe(false);
+  });
+
+  it('rejects Russian "спасибо" (thank you)', () => {
+    expect(validateQuery('спасибо').ok).toBe(false);
+  });
+
+  it('rejects Russian "как дела" (how are you)', () => {
+    expect(validateQuery('как дела').ok).toBe(false);
+  });
+
+  it('rejects Hebrew "תודה רבה" (thank you)', () => {
+    expect(validateQuery('תודה רבה').ok).toBe(false);
+  });
+
+  it('rejects Hebrew "בוקר טוב" (good morning)', () => {
+    expect(validateQuery('בוקר טוב').ok).toBe(false);
+  });
+
+  it('rejects Hebrew "מה שלומך" (how are you)', () => {
+    expect(validateQuery('מה שלומך').ok).toBe(false);
+  });
+
+  it('accepts Russian product name "молоко" (milk — not conversational)', () => {
+    expect(validateQuery('молоко').ok).toBe(true);
+  });
+
+  it('accepts Hebrew product name "חלב" (milk — not conversational)', () => {
+    expect(validateQuery('חלב').ok).toBe(true);
   });
 });

@@ -107,8 +107,13 @@ function ruleNoKeyboardSpam(q: string): ValidationResult {
 function ruleNotConversational(q: string): ValidationResult {
   const lower = q.toLowerCase().trim();
 
+  // \b (ASCII word boundary) does not work with Cyrillic or Hebrew characters.
+  // For non-ASCII scripts we use (?:^|\s) / (?:\s|$) as Unicode-safe boundaries.
+  const W = String.raw`(?:^|\s)`; // leading Unicode-safe word boundary
+  const WE = String.raw`(?=\s|$|[,!?.;])`; // trailing Unicode-safe word boundary
+
   const conversationalPatterns = [
-    // ── English ──
+    // ── English (ASCII — \b is fine) ──
     /^(?:hi|hello|hey|howdy|greetings)\b/,
     /\bhow\s+are\s+you\b/,
     /\bwhat(?:'s|\s+is)\s+(?:up|your\s+name|going\s+on|this|that)\b/,
@@ -119,28 +124,28 @@ function ruleNotConversational(q: string): ValidationResult {
     /\bthank\s*you\b|\bthanks\b/,
     /\bplease\s+help\b/,
 
-    // ── Russian ──
-    /^привет\b/,
-    /^здравствуй/,
+    // ── Russian (Cyrillic — use Unicode-safe boundaries) ──
+    new RegExp(`^привет${WE}`),                               // "привет [...]"
+    /^здравствуй/,                                            // already anchored, no trailing boundary needed
     /^добр(?:ый|ое|ого)\s+(?:день|утро|вечер)/,
-    /\bкак\s+(?:дела|поживаешь|ты)\b/,
-    /\bчто\s+(?:такое|происходит|нового|это)\b/,
-    /\bкто\s+ты\b/,
-    /\bрасскажи\s+(?:мне|о)\b/,
-    /\bспасибо\b/,
-    /\bпомогите?\b/,
+    new RegExp(`${W}как\\s+(?:дела|поживаешь|ты)${WE}`),
+    new RegExp(`${W}что\\s+(?:такое|происходит|нового|это)${WE}`),
+    new RegExp(`${W}кто\\s+ты${WE}`),
+    new RegExp(`${W}расскажи\\s+(?:мне|о)${WE}`),
+    new RegExp(`${W}спасибо${WE}`),
+    new RegExp(`${W}помогите?${WE}`),
 
-    // ── Hebrew ──
-    /^שלום[\s,]+מה/,         // "שלום, מה..."
-    /\bמה\s+שלומך\b/,        // how are you
-    /\bמי\s+אתה\b/,          // who are you
-    /\bספר\s+לי\b/,          // tell me
-    /\bמה\s+אתה\b/,          // what are you
-    /\bאיך\s+אתה\b/,         // how are you (alt)
-    /\bבוקר\s+טוב\b/,        // good morning
-    /\bלילה\s+טוב\b/,        // good night
-    /\bתודה\s+רבה\b/,        // thank you
-    /\bעזור\s+לי\b/,         // help me
+    // ── Hebrew (non-ASCII — use Unicode-safe boundaries) ──
+    /^שלום[\s,]+מה/,                                          // "שלום, מה..."
+    new RegExp(`${W}מה\\s+שלומך${WE}`),                      // how are you
+    new RegExp(`${W}מי\\s+אתה${WE}`),                        // who are you
+    new RegExp(`${W}ספר\\s+לי${WE}`),                        // tell me
+    new RegExp(`${W}מה\\s+אתה${WE}`),                        // what are you
+    new RegExp(`${W}איך\\s+אתה${WE}`),                       // how are you (alt)
+    new RegExp(`${W}בוקר\\s+טוב${WE}`),                      // good morning
+    new RegExp(`${W}לילה\\s+טוב${WE}`),                      // good night
+    new RegExp(`${W}תודה\\s+רבה${WE}`),                      // thank you
+    new RegExp(`${W}עזור\\s+לי${WE}`),                       // help me
   ];
 
   for (const pattern of conversationalPatterns) {
