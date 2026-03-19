@@ -81,10 +81,11 @@ as $$
   -- zero tokens, runs in milliseconds for 3 000 products.
   barcode_hits as (
     select
-      m.id       as product_id,
+      m.id           as product_id,
       cp.price,
       cs.chain,
-      cs.city
+      cs.city,
+      cp.updated_at  as price_updated_at   -- for staleness display in UI
     from   merchant m
     join   public.products cp
       on   cp.barcode    = m.barcode
@@ -103,7 +104,8 @@ as $$
       pm.merchant_product_id as product_id,
       cp.price,
       cs.chain,
-      cs.city
+      cs.city,
+      cp.updated_at          as price_updated_at
     from   public.product_matches pm
     join   public.products cp
       on   cp.id = pm.competitor_product_id
@@ -119,9 +121,9 @@ as $$
 
   -- Union both paths (barcode_hits already deduplicated by join semantics)
   all_hits as (
-    select product_id, price, chain, city from barcode_hits
+    select product_id, price, chain, city, price_updated_at from barcode_hits
     union
-    select product_id, price, chain, city from cached_hits
+    select product_id, price, chain, city, price_updated_at from cached_hits
   ),
 
   -- Aggregate per merchant product
@@ -133,17 +135,19 @@ as $$
       round(avg(price)::numeric, 2)        as market_avg,
       count(distinct (chain, city))::int   as competitor_count,
       -- Top-3 competitors: one row per chain, cheapest first
+      -- Includes price_updated_at so UI can show "2 hours ago"
       (
         select jsonb_agg(row_data order by (row_data->>'price')::numeric)
         from (
           select distinct on (sub.chain)
             jsonb_build_object(
-              'chain', sub.chain,
-              'city',  sub.city,
-              'price', sub.price
+              'chain',             sub.chain,
+              'city',              sub.city,
+              'price',             sub.price,
+              'price_updated_at',  sub.price_updated_at
             ) as row_data
           from (
-            select chain, city, price
+            select chain, city, price, price_updated_at
             from   all_hits h2
             where  h2.product_id = a.product_id
             order  by chain, price
@@ -167,7 +171,65 @@ as $$
 $$;
 
 -- ============================================================
--- 3. RLS for product_matches
+-- 3. RPC — find_competitor_matches
+--    pgvector ANN search scoped to competitor stores only.
+--    Used by market-matcher.ts Step 2.
+--
+--    Advantages over the generic search_products() RPC:
+--      • Excludes the merchant's own store at DB level
+--      • Optionally filters by city (Beersheba-factor)
+--      • Returns chain / city / unit so the LLM can validate volume
+--      • Supports a configurable similarity threshold
+-- ============================================================
+create or replace function public.find_competitor_matches(
+  p_query_embedding    vector(1536),
+  p_merchant_store_id  uuid,
+  p_city               text    default null,
+  p_threshold          float   default 0.60,
+  p_count              int     default 5
+)
+returns table (
+  id          uuid,
+  store_id    uuid,
+  chain       text,
+  city        text,
+  name_he     text,
+  name_en     text,
+  name_ru     text,
+  price       numeric,
+  unit        text,
+  updated_at  timestamptz,
+  similarity  float
+)
+language sql
+stable
+as $$
+  select
+    p.id,
+    p.store_id,
+    s.chain,
+    s.city,
+    p.name_he,
+    p.name_en,
+    p.name_ru,
+    p.price,
+    p.unit,
+    p.updated_at,
+    1 - (p.embedding <=> p_query_embedding) as similarity
+  from   public.products p
+  join   public.stores   s on s.id = p.store_id
+  where  p.store_id        != p_merchant_store_id
+    and  p.is_available     = true
+    and  s.is_active        = true
+    and  p.embedding        is not null
+    and  (p_city is null or lower(s.city) = lower(p_city))
+    and  1 - (p.embedding <=> p_query_embedding) > p_threshold
+  order  by p.embedding <=> p_query_embedding
+  limit  p_count;
+$$;
+
+-- ============================================================
+-- 4. RLS for product_matches
 -- ============================================================
 alter table public.product_matches enable row level security;
 

@@ -9,6 +9,7 @@ export interface CompetitorDetail {
   chain: string | null;
   city: string | null;
   price: number;
+  price_updated_at: string | null; // ISO timestamp — used to show data freshness
 }
 
 export interface MarketComparison {
