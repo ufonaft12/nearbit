@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getServerUser } from '@/lib/auth/getUser';
 import { signOutAction } from '@/app/login/actions';
+import { SearchHistoryList } from './components/SearchHistoryList';
+import { PurchaseLogList } from './components/PurchaseLogList';
 
 export const metadata: Metadata = {
   title: 'My Profile | Nearbit',
@@ -54,12 +56,7 @@ export default async function ProfilePage() {
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
             Search History
           </h2>
-          <div
-            id="search-history-slot"
-            className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 text-sm text-zinc-400 text-center"
-          >
-            Your search history will appear here.
-          </div>
+          <SearchHistoryList />
         </section>
 
         {/* ── Purchase log (Phase 2) ───────────────────────────── */}
@@ -67,12 +64,7 @@ export default async function ProfilePage() {
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
             My Purchases
           </h2>
-          <div
-            id="purchase-log-slot"
-            className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 text-sm text-zinc-400 text-center"
-          >
-            Products you&apos;ve marked as purchased will appear here.
-          </div>
+          <PurchaseLogList />
         </section>
 
       </div>

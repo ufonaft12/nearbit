@@ -14,6 +14,7 @@ import { BasketFloatingBar } from '@/app/components/basket/BasketFloatingBar';
 import { useLocale } from '@/app/providers';
 import { SUGGESTIONS_BY_LOCALE } from '@/lib/i18n/config';
 import type { SearchStrategy } from '@/types/nearbit';
+import { useRecordSearch } from '@/lib/hooks/useHistory';
 
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ export default function Home() {
   const [pendingAddLabel, setPendingAddLabel]   = useState<string | null>(null);
 
   const pendingAutoAddQueryRef = useRef<string | null>(null);
+  const { mutate: recordSearch } = useRecordSearch();
 
   // ── TanStack Query ───────────────────────────────────────────────────────────
   const { data, isFetching, isError, error, isSuccess } = useQuery({
@@ -41,6 +43,13 @@ export default function Home() {
   useEffect(() => {
     if (!data) return;
     vibrate(50);
+
+    // Fire-and-forget: record the search for history (no-op if not logged in)
+    recordSearch({
+      query: committedQuery,
+      results_count: data.results.length,
+      locale,
+    });
 
     const pendingQuery = pendingAutoAddQueryRef.current;
     if (pendingQuery && data.results.length > 0) {
