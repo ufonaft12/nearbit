@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ProductsTable from "@/components/inventory/ProductsTable";
+import { getMarketComparisons } from "@/lib/actions/market";
 import { Upload } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -13,15 +14,20 @@ export default async function InventoryPage() {
 
   const { data: store } = await supabase
     .from("stores")
-    .select("id")
+    .select("id, city")
     .eq("owner_id", user!.id)
     .single();
 
-  const { data: products } = await supabase
-    .from("products")
-    .select("*")
-    .eq("store_id", store?.id ?? "")
-    .order("name_he");
+  const [products, marketData] = await Promise.all([
+    supabase
+      .from("products")
+      .select("*")
+      .eq("store_id", store?.id ?? "")
+      .order("name_he")
+      .then((r) => r.data ?? []),
+    // Pass the store's city so the RPC filters by nearby competitors
+    getMarketComparisons(store?.city ?? undefined),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -41,7 +47,10 @@ export default async function InventoryPage() {
         </Link>
       </div>
 
-      <ProductsTable products={products ?? []} />
+      <ProductsTable
+        products={products}
+        marketData={marketData}
+      />
     </div>
   );
 }

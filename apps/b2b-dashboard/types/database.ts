@@ -1,8 +1,9 @@
-// Types mirroring the merged B2C + B2B Supabase schema.
+// Types mirroring the merged B2C + B2B + Market Intelligence Supabase schema.
 // B2C base tables: stores, products (with pgvector, POS sync columns)
 // B2B additions:   stores.(name_heb, chain, logo_url)
 //                  products.(category_id, sale_price, sale_until, image_url)
 //                  categories, price_history tables
+// Market Intel:    global_market_prices, product_matches tables
 //
 // Run `supabase gen types typescript` against a live project to regenerate.
 
@@ -43,7 +44,7 @@ export interface Database {
       };
 
       // ----------------------------------------------------------
-      // CATEGORIES — B2B-only table
+      // CATEGORIES — B2B taxonomy table
       // ----------------------------------------------------------
       categories: {
         Row: {
@@ -64,11 +65,6 @@ export interface Database {
 
       // ----------------------------------------------------------
       // PRODUCTS — B2C base + B2B additions
-      // B2C columns: pos_item_id, raw_*, name_he, name_ru, name_en,
-      //              normalized_name, category (text), price, unit,
-      //              barcode, embedding, last_synced_at, sync_hash,
-      //              is_available, quantity
-      // B2B additions: category_id, sale_price, sale_until, image_url
       // ----------------------------------------------------------
       products: {
         Row: {
@@ -85,8 +81,8 @@ export interface Database {
           name_he: string | null;
           name_ru: string | null;
           name_en: string | null;
-          normalized_name: string | null; // computed: coalesce(name_he, name_en, raw_name)
-          category: string | null;        // free-text LLM category (B2C)
+          normalized_name: string | null;
+          category: string | null;
           price: number | null;
           quantity: number | null;
           unit: "kg" | "g" | "liter" | "ml" | "pcs" | "pack" | "other" | null;
@@ -95,7 +91,7 @@ export interface Database {
           sync_hash: string | null;
           is_available: boolean;
           // B2B additions
-          category_id: number | null;     // FK to categories table
+          category_id: number | null;
           sale_price: number | null;
           sale_until: string | null;
           image_url: string | null;
@@ -129,6 +125,28 @@ export interface Database {
         > & { id?: number };
         Update: never; // append-only
       };
+
+      // ----------------------------------------------------------
+      // PRODUCT_MATCHES — cached AI / pgvector match results
+      // Maps a merchant product (no barcode) → closest competitor
+      // product already in the shared products table.
+      // Products WITH barcodes are matched in SQL directly.
+      // ----------------------------------------------------------
+      product_matches: {
+        Row: {
+          id: number;
+          merchant_product_id: string;     // FK → products(id)
+          competitor_product_id: string;   // FK → products(id) in another store
+          match_method: "vector" | "llm";
+          confidence: number | null;
+          matched_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["product_matches"]["Row"],
+          "id" | "matched_at"
+        > & { id?: number };
+        Update: Partial<Database["public"]["Tables"]["product_matches"]["Insert"]>;
+      };
     };
   };
 }
@@ -138,6 +156,7 @@ export type Store = Database["public"]["Tables"]["stores"]["Row"];
 export type Product = Database["public"]["Tables"]["products"]["Row"];
 export type Category = Database["public"]["Tables"]["categories"]["Row"];
 export type PriceHistory = Database["public"]["Tables"]["price_history"]["Row"];
+export type ProductMatch = Database["public"]["Tables"]["product_matches"]["Row"];
 
 // Shape of a single row parsed from a B2B CSV/Excel upload.
 // Maps to B2C column names so it can be inserted directly.
