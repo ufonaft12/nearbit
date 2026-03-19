@@ -1,0 +1,73 @@
+{
+  "nav": {
+    "dashboard": "לוח בקרה",
+    "inventory": "מלאי",
+    "priceTags": "תגי מחיר",
+    "settings": "הגדרות",
+    "signOut": "התנתק"
+  },
+  "inventory": {
+    "title": "מלאי",
+    "subtitle": "נהל את קטלוג המוצרים שלך",
+    "uploadButton": "העלה מלאי",
+    "searchPlaceholder": "חפש לפי שם או ברקוד…",
+    "generateTags": "צור תגיות ({count})",
+    "noProducts": "לא נמצאו מוצרים.",
+    "showing": "מציג {filtered} מתוך {total} מוצרים",
+    "priceAboveMarket": "מחיר גבוה ב-10%+ מהשוק",
+    "columns": {
+      "productName": "שם מוצר",
+      "name": "שם",
+      "barcode": "ברקוד",
+      "price": "מחיר",
+      "marketComparison": "השוואת שוק",
+      "marketSubtitle": "↓ הכי טוב / הפרש",
+      "status": "סטטוס"
+    },
+    "status": {
+      "active": "פעיל",
+      "inactive": "לא פעיל"
+    },
+    "market": {
+      "best": "הכי טוב",
+      "competitors": "מתחרה אחד",
+      "competitorsPlural": "{count} מתחרים",
+      "marketAverage": "ממוצע שוק",
+      "match": "התאם",
+      "matchTitle": "קבע מחיר לממוצע השוק פחות ₪0.10 (₪{price})",
+      "aboveAvg": "+{pct}% ממוצע",
+      "belowAvg": "{pct}% ממוצע",
+      "sale": "מבצע"
+    }
+  },
+  "dashboard": {
+    "title": "לוח בקרה",
+    "subtitle": "סקירת ביצועי החנות שלך"
+  },
+  "priceTags": {
+    "title": "תגי מחיר",
+    "subtitle": "צור והדפס תגי מחיר"
+  },
+  "settings": {
+    "title": "הגדרות",
+    "subtitle": "נהל את הגדרות החנות שלך"
+  },
+  "auth": {
+    "signIn": "התחבר",
+    "signUp": "הירשם",
+    "email": "דואר אלקטרוני",
+    "password": "סיסמה",
+    "forgotPassword": "שכחת סיסמה?",
+    "noAccount": "אין לך חשבון?",
+    "haveAccount": "כבר יש לך חשבון?"
+  },
+  "common": {
+    "loading": "טוען…",
+    "error": "משהו השתבש",
+    "retry": "נסה שוב",
+    "cancel": "ביטול",
+    "save": "שמור",
+    "delete": "מחק",
+    "edit": "ערוך"
+  }
+}
