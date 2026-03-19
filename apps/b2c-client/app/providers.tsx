@@ -112,8 +112,7 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
       store.dispatch(hydrateBasket({ items: [], strategy: 'cheap' }));
     }
 
-    // 2. Persist on every subsequent change (gated on hydrated=true to avoid
-    //    overwriting saved data with the empty pre-hydration initial state)
+    // 2. Persist on every subsequent change (gated on hydrated=true)
     const unsubscribe = store.subscribe(() => {
       const { basket } = store.getState();
       if (!basket.hydrated) return;
@@ -122,7 +121,7 @@ function StoreProvider({ children }: { children: React.ReactNode }) {
           BASKET_STORAGE_KEY,
           JSON.stringify({ items: basket.items, strategy: basket.strategy }),
         );
-      } catch { /* quota exceeded — silently ignore */ }
+      } catch { /* quota exceeded */ }
     });
 
     return unsubscribe;

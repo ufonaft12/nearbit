@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Providers } from "./providers";
-import { HtmlDirSync } from "./components/HtmlDirSync";
+import { HtmlDirSync } from "./components/layout/HtmlDirSync";
 import "./globals.css";
 
 const geistSans = localFont({

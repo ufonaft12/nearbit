@@ -73,7 +73,7 @@
     "adding": "Adding \"{label}\" to basket…",
     "itemCount": "{count, plural, one {# item in basket} other {# items in basket}}",
     "estimated": "Estimated:",
-    "stores": "{count} stores",
+    "stores": "{count, plural, one {# store} other {# stores}}",
     "clearAll": "Clear all",
     "removeItem": "Remove {name} from basket",
     "chooseStore": "Choose store to navigate to",

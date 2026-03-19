@@ -73,7 +73,7 @@
     "adding": "מוסיף \"{label}\" לסל…",
     "itemCount": "{count, plural, one {מוצר אחד בסל} other {{count} מוצרים בסל}}",
     "estimated": "הערכה:",
-    "stores": "{count} חנויות",
+    "stores": "{count, plural, one {חנות אחת} other {{count} חנויות}}",
     "clearAll": "נקה הכל",
     "removeItem": "הסר {name} מהסל",
     "chooseStore": "בחר חנות לניווט",

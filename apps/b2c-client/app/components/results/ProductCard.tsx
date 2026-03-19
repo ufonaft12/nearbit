@@ -3,8 +3,8 @@
 import { memo, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { MapPin, AlertTriangle } from 'lucide-react';
-import { WhatsAppIcon } from './WhatsAppIcon';
-import { DirectionsButtons } from './DirectionsButtons';
+import { WhatsAppIcon } from '@/app/components/ui/WhatsAppIcon';
+import { DirectionsButtons } from '@/app/components/ui/DirectionsButtons';
 import { getPriceTrend } from '@/lib/utils/pricing';
 import type { SearchResultWithStore, BasketItem } from '@/types/nearbit';
 
@@ -99,21 +99,14 @@ export const ProductCard = memo(function ProductCard({
 
       {/* Left column */}
       <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-        <span
-          className="font-medium text-zinc-900 dark:text-zinc-50 truncate"
-          dir="rtl"
-          title={productName}
-        >
+        <span className="font-medium text-zinc-900 dark:text-zinc-50 truncate" dir="rtl" title={productName}>
           {productName}
         </span>
-
         {subtitle && (
           <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate">{subtitle}</span>
         )}
-
         <span className="text-xs text-zinc-400">{r.storeName}</span>
 
-        {/* Directions + Share row */}
         <div className="flex items-center gap-3 mt-1 flex-wrap">
           <DirectionsButtons storeName={r.storeName} storeLat={r.storeLat} storeLng={r.storeLng} />
           <button
@@ -135,7 +128,6 @@ export const ProductCard = memo(function ProductCard({
             ₪{r.price.toFixed(2)}
           </span>
         )}
-
         {trendLabel && (
           <span
             className={`text-[11px] font-medium ${
@@ -147,14 +139,11 @@ export const ProductCard = memo(function ProductCard({
             {trendLabel}
           </span>
         )}
-
-        {/* Distance badge */}
         {r.distanceKm != null && (
           <span className="inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
             <MapPin size={10} /> {r.distanceKm} km
           </span>
         )}
-
         {isLowStock && (
           <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-orange-600 dark:text-orange-400">
             <AlertTriangle size={11} /> {t('lowStock', { qty: r.quantity ?? 0 })}
@@ -165,7 +154,6 @@ export const ProductCard = memo(function ProductCard({
             {t('outOfStock')}
           </span>
         )}
-
         <span className="text-[11px] text-zinc-400">
           {t('match', { score: (r.similarity * 100).toFixed(0) })}
         </span>

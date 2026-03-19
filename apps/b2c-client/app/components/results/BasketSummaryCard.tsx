@@ -3,8 +3,8 @@
 import { memo } from 'react';
 import { useTranslations } from 'next-intl';
 import { ShoppingBasket, Trophy } from 'lucide-react';
-import { WhatsAppIcon } from './WhatsAppIcon';
-import { DirectionsButtons } from './DirectionsButtons';
+import { WhatsAppIcon } from '@/app/components/ui/WhatsAppIcon';
+import { DirectionsButtons } from '@/app/components/ui/DirectionsButtons';
 import type { BasketResult } from '@/types/nearbit';
 
 interface Props {
@@ -51,7 +51,7 @@ export const BasketSummaryCard = memo(function BasketSummaryCard({ basket, query
         )}
       </div>
 
-      {/* Share basket summary */}
+      {/* Share basket */}
       <button
         type="button"
         onClick={shareBasket}

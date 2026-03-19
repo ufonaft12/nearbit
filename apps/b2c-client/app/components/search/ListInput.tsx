@@ -14,8 +14,7 @@
  * Props:
  *   items          — controlled array of item strings
  *   onItemsChange  — called whenever the list changes (add / remove)
- *   onBack         — called when user wants to return to text mode (all chips
- *                    removed, or Escape pressed in empty add-input)
+ *   onBack         — called when user wants to return to text mode
  */
 
 import {
@@ -39,20 +38,16 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
   const [addValue, setAddValue] = useState('');
   const addInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Add a new item ─────────────────────────────────────────────────────────
   const commitAdd = useCallback(() => {
     const trimmed = addValue.trim();
     if (!trimmed) return;
 
-    // Support pasting a comma-separated list into the add-field
     const segments = trimmed
       .split(/[,،\n]/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    if (segments.length > 0) {
-      onItemsChange([...items, ...segments]);
-    }
+    if (segments.length > 0) onItemsChange([...items, ...segments]);
     setAddValue('');
   }, [addValue, items, onItemsChange]);
 
@@ -62,11 +57,9 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
         e.preventDefault();
         commitAdd();
       } else if (e.key === 'Escape') {
-        // Back to text mode only when the add-input is empty
         if (addValue === '') onBack();
         else setAddValue('');
       } else if (e.key === 'Backspace' && addValue === '' && items.length > 0) {
-        // Delete last chip with Backspace on empty input (keyboard shortcut)
         const next = items.slice(0, -1);
         onItemsChange(next);
         if (next.length === 0) onBack();
@@ -75,13 +68,11 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
     [addValue, commitAdd, items, onBack, onItemsChange],
   );
 
-  // ── Remove a chip ──────────────────────────────────────────────────────────
   const handleRemove = useCallback(
     (index: number) => {
       const next = items.filter((_, i) => i !== index);
       onItemsChange(next);
       if (next.length === 0) onBack();
-      // Keep focus on the add-input after removal
       addInputRef.current?.focus();
     },
     [items, onItemsChange, onBack],
@@ -89,8 +80,7 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3">
-
-      {/* ── Header row: mode label + back button ─────────────────────────── */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-0.5">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
           <ListChecks size={13} />
@@ -108,7 +98,7 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
         </button>
       </div>
 
-      {/* ── Chip list ─────────────────────────────────────────────────────── */}
+      {/* Chip list */}
       {items.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {items.map((item, i) => (
@@ -130,7 +120,7 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
         </div>
       )}
 
-      {/* ── Add-item input ────────────────────────────────────────────────── */}
+      {/* Add-item input */}
       <div className="flex items-center gap-2">
         <input
           ref={addInputRef}
@@ -155,7 +145,7 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
         </button>
       </div>
 
-      {/* ── Keyboard hint ─────────────────────────────────────────────────── */}
+      {/* Keyboard hint */}
       <p className="text-[11px] text-zinc-400 -mt-1">
         {t('listHelpText')}
       </p>
