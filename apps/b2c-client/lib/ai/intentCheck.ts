@@ -68,15 +68,14 @@ export async function checkProductIntent(query: string, userId?: string): Promis
     );
     const isProduct = result.trim().toUpperCase().startsWith('YES');
 
-    // Flush Langfuse trace before the serverless function can exit
-    if (handler) await handler.flushAsync();
-
-    // Back-fill Redis asynchronously
+    // Fire-and-forget: both Redis write and Langfuse flush run in the background
+    // so they don't add latency to the API response.
     if (redis) {
       redis
         .set(cacheKey, isProduct ? 'YES' : 'NO', { ex: INTENT_CACHE_TTL })
         .catch(() => {});
     }
+    if (handler) handler.flushAsync().catch(() => {});
 
     console.log(`[intent] LLM "${normalized.slice(0, 40)}" → ${isProduct ? 'YES' : 'NO'}`);
     return isProduct;
