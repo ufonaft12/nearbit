@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Navigation, ShoppingBasket } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
@@ -50,13 +50,12 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
     return [...seen.values()];
   }, [items]);
 
-  if (!hydrated || items.length === 0) return null;
-
-  const totalCost = items.reduce((sum, i) => sum + (i.price ?? 0), 0);
+  // Derived values — safe to compute even when basket is empty (guards below handle rendering)
+  const totalCost  = useMemo(() => items.reduce((sum, i) => sum + (i.price ?? 0), 0), [items]);
   const multiStore = uniqueStores.length > 1;
 
   // ── WhatsApp share ──────────────────────────────────────────────────────────
-  const shareOnWhatsApp = () => {
+  const shareOnWhatsApp = useCallback(() => {
     const byStore = new Map<string, { storeName: string; lines: string[] }>();
     for (const item of items) {
       if (!byStore.has(item.storeId)) {
@@ -78,11 +77,14 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
     ].join('\n\n');
 
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  };
+  }, [items, totalCost, tWa]);
 
-  const openSingleWaze = (store: typeof uniqueStores[number]) => {
+  const openSingleWaze = useCallback((store: typeof uniqueStores[number]) => {
     window.open(wazeUrl(store.storeName, store.storeLat, store.storeLng), '_blank', 'noopener');
-  };
+  }, []);
+
+  // ── Guard: only render once hydrated and basket is non-empty ────────────────
+  if (!hydrated || items.length === 0) return null;
 
   return (
     <div

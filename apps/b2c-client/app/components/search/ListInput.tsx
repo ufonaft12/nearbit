@@ -18,6 +18,7 @@
  */
 
 import {
+  memo,
   useState,
   useRef,
   useCallback,
@@ -32,7 +33,7 @@ interface Props {
   onBack:        () => void;
 }
 
-export function ListInput({ items, onItemsChange, onBack }: Props) {
+export const ListInput = memo(function ListInput({ items, onItemsChange, onBack }: Props) {
   const t = useTranslations('search');
 
   const [addValue, setAddValue] = useState('');
@@ -151,4 +152,4 @@ export function ListInput({ items, onItemsChange, onBack }: Props) {
       </p>
     </div>
   );
-}
+});

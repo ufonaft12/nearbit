@@ -1,5 +1,6 @@
 'use client';
 
+import { memo, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { WhatsAppIcon } from '@/app/components/ui/WhatsAppIcon';
 
@@ -8,14 +9,14 @@ interface Props {
   query:  string;
 }
 
-export function AnswerCard({ answer, query }: Props) {
+export const AnswerCard = memo(function AnswerCard({ answer, query }: Props) {
   const t   = useTranslations('results');
   const tWa = useTranslations('whatsapp');
 
-  const share = () => {
+  const share = useCallback(() => {
     const text = tWa('answerText', { query, answer });
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-  };
+  }, [tWa, query, answer]);
 
   return (
     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-4">
@@ -38,4 +39,4 @@ export function AnswerCard({ answer, query }: Props) {
       </p>
     </div>
   );
-}
+});
