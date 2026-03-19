@@ -21,7 +21,8 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { redis } from '@/lib/redis';
 
 const mockCreate = vi.mocked(createSupabaseServerClient);
-const mockRedis = vi.mocked(redis);
+// In tests redis is always mocked as non-null
+const mockRedis = vi.mocked(redis) as NonNullable<typeof redis>;
 
 const FAKE_USER = { id: 'user-abc', email: 'test@test.com' };
 
@@ -70,7 +71,7 @@ function makeClient({
   };
 }
 
-function req(url: string, options?: RequestInit) {
+function req(url: string, options?: { method?: string; body?: string }) {
   return new NextRequest(url, options);
 }
 
@@ -79,7 +80,7 @@ describe('GET /api/history', () => {
 
   it('returns 401 when not authenticated', async () => {
     mockCreate.mockResolvedValue(makeClient({ user: null }) as never);
-    (mockRedis.get as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    vi.mocked(mockRedis.get as unknown as (...args: never[]) => unknown).mockResolvedValue(null);
 
     const res = await getHistory(req('http://localhost/api/history?type=search'));
     expect(res.status).toBe(401);
@@ -87,7 +88,7 @@ describe('GET /api/history', () => {
 
   it('returns search history from cache when available', async () => {
     mockCreate.mockResolvedValue(makeClient() as never);
-    (mockRedis.get as ReturnType<typeof vi.fn>).mockResolvedValue(
+    vi.mocked(mockRedis.get as unknown as (...args: never[]) => unknown).mockResolvedValue(
       JSON.stringify(FAKE_SEARCH_ROWS),
     );
 
@@ -102,8 +103,8 @@ describe('GET /api/history', () => {
 
   it('returns search history from Supabase on cache miss and writes cache', async () => {
     mockCreate.mockResolvedValue(makeClient() as never);
-    (mockRedis.get as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (mockRedis.set as ReturnType<typeof vi.fn>).mockResolvedValue('OK');
+    vi.mocked(mockRedis.get as unknown as (...args: never[]) => unknown).mockResolvedValue(null);
+    vi.mocked(mockRedis.set as unknown as (...args: never[]) => unknown).mockResolvedValue('OK');
 
     const res = await getHistory(req('http://localhost/api/history?type=search'));
     expect(res.status).toBe(200);
@@ -114,8 +115,8 @@ describe('GET /api/history', () => {
 
   it('returns purchases history when type=purchases', async () => {
     mockCreate.mockResolvedValue(makeClient() as never);
-    (mockRedis.get as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (mockRedis.set as ReturnType<typeof vi.fn>).mockResolvedValue('OK');
+    vi.mocked(mockRedis.get as unknown as (...args: never[]) => unknown).mockResolvedValue(null);
+    vi.mocked(mockRedis.set as unknown as (...args: never[]) => unknown).mockResolvedValue('OK');
 
     const res = await getHistory(req('http://localhost/api/history?type=purchases'));
     expect(res.status).toBe(200);
@@ -147,7 +148,7 @@ describe('POST /api/history (record search)', () => {
 
   it('records a search and invalidates cache', async () => {
     mockCreate.mockResolvedValue(makeClient() as never);
-    (mockRedis.del as ReturnType<typeof vi.fn>).mockResolvedValue(1);
+    vi.mocked(mockRedis.del as unknown as (...args: never[]) => unknown).mockResolvedValue(1);
 
     const res = await postHistory(
       req('http://localhost/api/history', {
@@ -162,7 +163,7 @@ describe('POST /api/history (record search)', () => {
 
   it('records a purchase and invalidates cache', async () => {
     mockCreate.mockResolvedValue(makeClient() as never);
-    (mockRedis.del as ReturnType<typeof vi.fn>).mockResolvedValue(1);
+    vi.mocked(mockRedis.del as unknown as (...args: never[]) => unknown).mockResolvedValue(1);
 
     const res = await postHistory(
       req('http://localhost/api/history', {

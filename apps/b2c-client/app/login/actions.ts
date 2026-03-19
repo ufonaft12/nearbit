@@ -18,7 +18,7 @@ export type AuthActionResult = { error: string } | null;
 export async function signInAction(email: string, password: string): Promise<AuthActionResult> {
   const parsed = credentialsSchema.safeParse({ email, password });
   if (!parsed.success) {
-    return { error: parsed.error.errors[0].message };
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid email or password.' };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -34,7 +34,7 @@ export async function signInAction(email: string, password: string): Promise<Aut
 export async function signUpAction(email: string, password: string): Promise<AuthActionResult> {
   const parsed = credentialsSchema.safeParse({ email, password });
   if (!parsed.success) {
-    return { error: parsed.error.errors[0].message };
+    return { error: parsed.error.issues[0]?.message ?? 'Please use a valid email and a password of at least 8 characters.' };
   }
 
   const supabase = await createSupabaseServerClient();

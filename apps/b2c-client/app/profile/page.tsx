@@ -4,6 +4,7 @@ import { getServerUser } from '@/lib/auth/getUser';
 import { signOutAction } from '@/app/login/actions';
 import { SearchHistoryList } from './components/SearchHistoryList';
 import { PurchaseLogList } from './components/PurchaseLogList';
+import { PriceAnalyticsSection } from './components/PriceAnalyticsSection';
 
 export const metadata: Metadata = {
   title: 'My Profile | Nearbit',
@@ -65,6 +66,14 @@ export default async function ProfilePage() {
             My Purchases
           </h2>
           <PurchaseLogList />
+        </section>
+
+        {/* ── Price analytics (Phase 3) ────────────────────────── */}
+        <section>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
+            Price Trends
+          </h2>
+          <PriceAnalyticsSection />
         </section>
 
       </div>

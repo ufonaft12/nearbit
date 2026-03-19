@@ -53,15 +53,17 @@ export async function GET(request: Request) {
 
   // ── Cache check ──────────────────────────────────────────────────────────────
   const key = cacheKey(user.id, type);
-  try {
-    const cached = await redis.get<string>(key);
-    if (cached) {
-      return NextResponse.json(JSON.parse(cached as string), {
-        headers: { 'X-Cache': 'HIT' },
-      });
+  if (redis) {
+    try {
+      const cached = await redis.get<string>(key);
+      if (cached) {
+        return NextResponse.json(JSON.parse(cached as string), {
+          headers: { 'X-Cache': 'HIT' },
+        });
+      }
+    } catch {
+      // Redis unavailable — fall through to Supabase
     }
-  } catch {
-    // Redis unavailable — fall through to Supabase
   }
 
   // ── Supabase query ────────────────────────────────────────────────────────────
@@ -81,10 +83,12 @@ export async function GET(request: Request) {
   }
 
   // ── Write to cache ────────────────────────────────────────────────────────────
-  try {
-    await redis.set(key, JSON.stringify(data), { ex: HISTORY_TTL_SEC });
-  } catch {
-    // Redis write failure is non-fatal
+  if (redis) {
+    try {
+      await redis.set(key, JSON.stringify(data), { ex: HISTORY_TTL_SEC });
+    } catch {
+      // Non-fatal
+    }
   }
 
   return NextResponse.json(data, {
@@ -119,8 +123,7 @@ export async function POST(request: Request) {
     // Determine if the type was valid but fields were missing (422) or type unknown (400)
     const typeCheck = z.object({ type: z.string() }).safeParse(body);
     const knownType = typeCheck.success && (typeCheck.data.type === 'search' || typeCheck.data.type === 'purchase');
-    // Zod v4 uses .issues; fall back to .errors for v3 compatibility
-    const msg = (parsed.error.issues ?? parsed.error.errors)?.[0]?.message ?? 'Invalid request';
+    const msg = parsed.error.issues?.[0]?.message ?? 'Invalid request';
     return NextResponse.json(
       { error: msg },
       { status: knownType ? 422 : 400 },
@@ -157,10 +160,12 @@ export async function POST(request: Request) {
 
   // ── Invalidate cache so next GET returns fresh data ──────────────────────────
   const cacheType = record.type === 'search' ? 'search' : 'purchases';
-  try {
-    await redis.del(cacheKey(user.id, cacheType));
-  } catch {
-    // Non-fatal
+  if (redis) {
+    try {
+      await redis.del(cacheKey(user.id, cacheType));
+    } catch {
+      // Non-fatal
+    }
   }
 
   return NextResponse.json({ ok: true }, { status: 201 });
