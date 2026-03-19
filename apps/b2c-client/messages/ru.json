@@ -85,6 +85,33 @@
     "connectionMessage": "Не удалось подключиться к серверу. Проверьте соединение и попробуйте снова.",
     "searchFailed": "Поиск не удался. Попробуйте снова."
   },
+  "auth": {
+    "signin_title": "Войти",
+    "signup_title": "Создать аккаунт",
+    "email_placeholder": "Адрес электронной почты",
+    "password_placeholder": "Пароль",
+    "signin_submit": "Войти",
+    "signup_submit": "Создать аккаунт",
+    "google_button": "Войти через Google",
+    "switch_to_signup": "Нет аккаунта? Зарегистрироваться",
+    "switch_to_signin": "Уже есть аккаунт? Войти",
+    "loading": "Загрузка…",
+    "check_email": "Проверьте почту — вам отправлена ссылка подтверждения.",
+    "signout": "Выйти",
+    "error_invalid": "Неверный email или пароль."
+  },
+  "profile": {
+    "title": "Мой профиль",
+    "signout": "Выйти",
+    "history_title": "История поиска",
+    "history_empty": "Поисков пока нет",
+    "purchases_title": "Мои покупки",
+    "purchases_empty": "Покупки ещё не записаны",
+    "mark_purchased": "Отметить как купленное",
+    "bought_at": "Куплено {date}",
+    "price_then": "Цена тогда: ₪{price}",
+    "no_analytics": "Данных о ценах пока нет"
+  },
   "whatsapp": {
     "productText": "Achi, посмотри что я нашёл на Nearbit! 🛒\n{name} – {price}\n📍 {store}\nСабаба-цена! 🤩",
     "answerText": "Achi, я спросил Nearbit о \"{query}\" и вот что нашлось:\n\n{answer}\n\n🛒 nearbit.app",

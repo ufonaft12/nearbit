@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { ThemeToggle } from '@/app/components/ui/ThemeToggle';
 import { LanguageSwitcher } from '@/app/components/ui/LanguageSwitcher';
+import { UserButton } from '@/app/components/auth/UserButton';
 
 export function Header() {
   const t = useTranslations('header');
@@ -22,6 +23,7 @@ export function Header() {
         <div className="flex items-center gap-1.5">
           <LanguageSwitcher />
           <ThemeToggle />
+          <UserButton />
         </div>
       </div>
     </header>
