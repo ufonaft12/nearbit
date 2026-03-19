@@ -372,7 +372,11 @@ export async function GET(req: NextRequest) {
   // ── Semantic intent check (LangChain + Redis cache) ───────────────────────
   // Runs after regex validation (validateQuery, client-side) and guard to
   // avoid wasting OpenAI credits on rate-limited or geo-blocked requests.
-  const isProductQuery = await checkProductIntent(query);
+  // Client IP is forwarded to Langfuse as userId for per-user trace grouping.
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? req.headers.get('x-real-ip')
+    ?? 'unknown';
+  const isProductQuery = await checkProductIntent(query, clientIp);
   if (!isProductQuery) {
     return NextResponse.json(
       { error: 'That doesn\'t look like a product search. Try "חלב", "eggs", or "молоко".' },

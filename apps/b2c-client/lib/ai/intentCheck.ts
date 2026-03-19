@@ -7,6 +7,9 @@
  * Redis cache: intent:<sha256(query)>  TTL 24 h
  * A cached "YES"/"NO" means the same query is never sent to OpenAI twice.
  * Fails open (returns true) if the LLM or Redis are unavailable.
+ *
+ * Langfuse tracing: if LANGFUSE_PUBLIC_KEY is set, each uncached LLM call
+ * is traced with the client IP as userId.
  */
 
 import { createHash } from 'crypto';
@@ -14,6 +17,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { redis } from '@/lib/redis';
+import { makeLangfuseHandler } from '@/lib/ai/langfuse';
 
 const INTENT_CACHE_TTL = 60 * 60 * 24; // 24 h
 
@@ -32,12 +36,15 @@ const chain = PromptTemplate.fromTemplate(INTENT_PROMPT)
  * Returns true if the query looks like a genuine product / grocery search.
  * Returns true (fail open) on any error so the main pipeline is never blocked
  * by an unavailable LLM or Redis.
+ *
+ * @param query  - the search string to classify
+ * @param userId - optional client IP / user ID forwarded to Langfuse traces
  */
-export async function checkProductIntent(query: string): Promise<boolean> {
+export async function checkProductIntent(query: string, userId?: string): Promise<boolean> {
   const normalized = query.toLowerCase().trim();
   const cacheKey   = `intent:${createHash('sha256').update(normalized).digest('hex')}`;
 
-  // 1. Redis cache check
+  // 1. Redis cache check — cached results skip the LLM entirely
   if (redis) {
     try {
       const cached = await redis.get<string>(cacheKey);
@@ -48,10 +55,21 @@ export async function checkProductIntent(query: string): Promise<boolean> {
     } catch { /* ignore, fall through to LLM */ }
   }
 
-  // 2. LLM call
+  // 2. LLM call (only reached on cache miss)
+  const handler = makeLangfuseHandler({
+    userId,
+    metadata: { query: normalized, route: 'intentCheck' },
+  });
+
   try {
-    const result    = await chain.invoke({ query: normalized });
+    const result = await chain.invoke(
+      { query: normalized },
+      handler ? { callbacks: [handler] } : {},
+    );
     const isProduct = result.trim().toUpperCase().startsWith('YES');
+
+    // Flush Langfuse trace before the serverless function can exit
+    if (handler) await handler.flushAsync();
 
     // Back-fill Redis asynchronously
     if (redis) {
@@ -63,6 +81,7 @@ export async function checkProductIntent(query: string): Promise<boolean> {
     console.log(`[intent] LLM "${normalized.slice(0, 40)}" → ${isProduct ? 'YES' : 'NO'}`);
     return isProduct;
   } catch (err) {
+    if (handler) handler.flushAsync().catch(() => {});
     console.warn('[intent] LLM error — fail open', err);
     return true;
   }
