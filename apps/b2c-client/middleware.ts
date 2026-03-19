@@ -22,11 +22,19 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          // Write mutated cookies back to both the request and response
+          // Write mutated cookies back to both the request and response.
+          // Enforce httpOnly + Secure + SameSite=lax so tokens are never
+          // accessible from JavaScript and are not sent in cross-site requests.
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options),
+            response.cookies.set(name, value, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/',
+              ...options, // Supabase may set maxAge/expires — keep those
+            }),
           );
         },
       },

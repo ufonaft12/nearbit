@@ -110,7 +110,15 @@
     "mark_purchased": "סמן כנקנה",
     "bought_at": "נקנה ב-{date}",
     "price_then": "מחיר אז: ₪{price}",
-    "no_analytics": "אין נתוני מחיר עדיין"
+    "no_analytics": "אין נתוני מחיר עדיין",
+    "edit_profile": "עריכת פרופיל",
+    "address_label": "כתובת",
+    "city_label": "עיר",
+    "address_placeholder": "הזן כתובת (לא חובה)",
+    "city_placeholder": "הזן עיר (לא חובה)",
+    "save": "שמור",
+    "saving": "שומר…",
+    "saved": "השינויים נשמרו!"
   },
   "whatsapp": {
     "productText": "אחי, תראה מה מצאתי ב-Nearbit! 🛒\n{name} – {price}\n📍 {store}\nסבבה דיל! 🤩",

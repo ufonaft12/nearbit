@@ -5,6 +5,7 @@ import { signOutAction } from '@/app/login/actions';
 import { SearchHistoryList } from './components/SearchHistoryList';
 import { PurchaseLogList } from './components/PurchaseLogList';
 import { PriceAnalyticsSection } from './components/PriceAnalyticsSection';
+import { ProfileEditForm } from './components/ProfileEditForm';
 
 export const metadata: Metadata = {
   title: 'My Profile | Nearbit',
@@ -50,6 +51,14 @@ export default async function ProfilePage() {
               Sign out
             </button>
           </form>
+        </section>
+
+        {/* ── Optional profile fields ──────────────────────────── */}
+        <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6">
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50 mb-4">
+            Edit Profile
+          </h2>
+          <ProfileEditForm />
         </section>
 
         {/* ── Search history (Phase 2) ─────────────────────────── */}

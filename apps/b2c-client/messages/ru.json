@@ -110,7 +110,15 @@
     "mark_purchased": "Отметить как купленное",
     "bought_at": "Куплено {date}",
     "price_then": "Цена тогда: ₪{price}",
-    "no_analytics": "Данных о ценах пока нет"
+    "no_analytics": "Данных о ценах пока нет",
+    "edit_profile": "Редактировать профиль",
+    "address_label": "Адрес",
+    "city_label": "Город",
+    "address_placeholder": "Введите адрес (необязательно)",
+    "city_placeholder": "Введите город (необязательно)",
+    "save": "Сохранить",
+    "saving": "Сохраняю…",
+    "saved": "Изменения сохранены!"
   },
   "whatsapp": {
     "productText": "Achi, посмотри что я нашёл на Nearbit! 🛒\n{name} – {price}\n📍 {store}\nСабаба-цена! 🤩",

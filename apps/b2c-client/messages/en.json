@@ -110,7 +110,15 @@
     "mark_purchased": "Mark as purchased",
     "bought_at": "Bought on {date}",
     "price_then": "Price then: ₪{price}",
-    "no_analytics": "No price data yet"
+    "no_analytics": "No price data yet",
+    "edit_profile": "Edit Profile",
+    "address_label": "Address",
+    "city_label": "City",
+    "address_placeholder": "Enter your address (optional)",
+    "city_placeholder": "Enter your city (optional)",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Changes saved!"
   },
   "whatsapp": {
     "productText": "Hey, check what I found on Nearbit! 🛒\n{name} – {price}\n📍 {store}\nGreat deal! 🤩",
