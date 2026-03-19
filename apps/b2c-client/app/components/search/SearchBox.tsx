@@ -329,7 +329,7 @@ export function SearchBox({
               rows={1}
               maxLength={MAX_QUERY_LENGTH}
               aria-label={tSearch('ariaLabel')}
-              className="w-full resize-none overflow-hidden rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+              className="w-full resize-none overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-blue-400/50 shadow-sm transition-shadow"
               style={{ minHeight: '48px' }}
             />
           )}
@@ -343,7 +343,7 @@ export function SearchBox({
                   l === 'he-IL' ? 'ru-RU' : l === 'ru-RU' ? 'en-US' : 'he-IL'
                 )}
                 title={tVoice('langTitle', { lang: sttLangName })}
-                className="rounded px-1.5 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                className="rounded-full px-2 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors"
               >
                 {sttLang === 'he-IL' ? 'HE' : sttLang === 'ru-RU' ? 'RU' : 'EN'}
               </button>
@@ -371,7 +371,7 @@ export function SearchBox({
             type="submit"
             disabled={isSubmitDisabled}
             aria-busy={isFetching}
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-900 dark:bg-zinc-50 px-5 py-3 text-sm font-semibold text-white dark:text-zinc-900 transition-opacity disabled:opacity-40 hover:opacity-80"
+            className="flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 px-5 py-3 text-sm font-semibold text-white transition-all disabled:opacity-40 shadow-sm"
           >
             {isFetching
               ? <Loader2 size={16} className="animate-spin" />
@@ -391,7 +391,7 @@ export function SearchBox({
               tLocation('idle')
             }
             aria-label={tLocation('ariaLabel')}
-            className={`flex items-center justify-center rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-40 ${
+            className={`flex items-center justify-center rounded-2xl border px-3 py-2.5 transition-all disabled:opacity-40 ${
               locStatus === 'active'
                 ? 'border-green-400 text-green-500 bg-green-50 dark:bg-green-950/30'
                 : locStatus === 'denied' || locStatus === 'unavailable'
@@ -430,20 +430,22 @@ export function SearchBox({
 
       {/* Basket mode indicator */}
       {isBasketQuery && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-          <ShoppingBasket size={13} /> {tSearch('basketMode')}
-        </p>
+        <div className="mt-2 rounded-full bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-2.5 py-0.5 w-fit">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <ShoppingBasket size={13} /> {tSearch('basketMode')}
+          </p>
+        </div>
       )}
 
       {/* Strategy toggle — shown when location is active */}
       {locStatus === 'active' && (
-        <div className="mt-3 flex items-center gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1 w-fit">
+        <div className="mt-3 flex items-center gap-1 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 p-1 w-fit shadow-sm">
           <button
             type="button"
             onClick={() => onStrategyChange('near')}
             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
               strategy === 'near'
-                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
           >
@@ -454,7 +456,7 @@ export function SearchBox({
             onClick={() => onStrategyChange('cheap')}
             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
               strategy === 'cheap'
-                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
             }`}
           >
@@ -470,7 +472,7 @@ export function SearchBox({
             key={s}
             type="button"
             onClick={() => handleSuggestion(s)}
-            className="rounded-full border border-zinc-200 dark:border-zinc-700 px-3 py-1 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-1 text-sm text-zinc-600 dark:text-zinc-300 hover:border-blue-300 dark:hover:border-blue-700 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm"
           >
             {s}
           </button>

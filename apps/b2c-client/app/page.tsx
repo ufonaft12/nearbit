@@ -79,10 +79,11 @@ export default function Home() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 font-sans relative overflow-hidden">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-blue-50/60 via-indigo-50/20 to-transparent dark:from-blue-950/20 dark:via-transparent dark:to-transparent" />
       <Header />
 
-      <main className="mx-auto max-w-2xl px-6 py-10 pb-40 flex flex-col gap-8">
+      <main className="relative mx-auto max-w-2xl px-6 py-10 pb-40 flex flex-col gap-8">
         <SearchBox
           strategy={strategy}
           isFetching={isFetching}

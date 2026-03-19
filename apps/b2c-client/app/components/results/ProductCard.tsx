@@ -71,10 +71,10 @@ export const ProductCard = memo(function ProductCard({
 
   return (
     <li
-      className={`rounded-xl border bg-white dark:bg-zinc-900 px-4 py-3 flex items-start justify-between gap-4 transition-colors ${
+      className={`rounded-2xl bg-white dark:bg-zinc-900 px-4 py-3.5 flex items-start justify-between gap-4 transition-all shadow-sm ${
         inBasket
-          ? 'border-green-300 dark:border-green-700 ring-1 ring-green-200 dark:ring-green-800'
-          : 'border-zinc-100 dark:border-zinc-800'
+          ? 'ring-2 ring-green-400 dark:ring-green-600 shadow-green-100 dark:shadow-green-950/20'
+          : 'hover:shadow-md'
       }`}
     >
       {/* Checkbox */}
@@ -86,8 +86,8 @@ export const ProductCard = memo(function ProductCard({
         onClick={() => { inBasket ? onRemove(r.id) : onAdd(basketItem); onVibrate(20); }}
         className={`mt-0.5 shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
           inBasket
-            ? 'bg-green-500 border-green-500 text-white'
-            : 'border-zinc-300 dark:border-zinc-600 hover:border-green-400 dark:hover:border-green-500'
+            ? 'bg-green-500 border-green-500 text-white shadow-sm'
+            : 'border-zinc-300 dark:border-zinc-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20'
         }`}
       >
         {inBasket && (
@@ -99,7 +99,7 @@ export const ProductCard = memo(function ProductCard({
 
       {/* Left column */}
       <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-        <span className="font-medium text-zinc-900 dark:text-zinc-50 truncate" dir="rtl" title={productName}>
+        <span className="font-semibold text-zinc-900 dark:text-zinc-50 truncate" dir="rtl" title={productName}>
           {productName}
         </span>
         {subtitle && (
@@ -124,7 +124,7 @@ export const ProductCard = memo(function ProductCard({
       {/* Right column */}
       <div className="flex flex-col items-end shrink-0 gap-1">
         {r.price != null && (
-          <span className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+          <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
             ₪{r.price.toFixed(2)}
           </span>
         )}
@@ -140,12 +140,12 @@ export const ProductCard = memo(function ProductCard({
           </span>
         )}
         {r.distanceKm != null && (
-          <span className="inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900 px-2 py-0.5 text-[11px] font-medium text-blue-600 dark:text-blue-400">
             <MapPin size={10} /> {r.distanceKm} km
           </span>
         )}
         {isLowStock && (
-          <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-orange-600 dark:text-orange-400">
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 px-2 py-0.5 text-[11px] font-semibold text-orange-600 dark:text-orange-400">
             <AlertTriangle size={11} /> {t('lowStock', { qty: r.quantity ?? 0 })}
           </span>
         )}

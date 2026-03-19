@@ -80,7 +80,7 @@ export const ListInput = memo(function ListInput({ items, onItemsChange, onBack 
   );
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3">
+    <div className="flex flex-col gap-2 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between mb-0.5">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
@@ -105,7 +105,7 @@ export const ListInput = memo(function ListInput({ items, onItemsChange, onBack 
           {items.map((item, i) => (
             <span
               key={`${item}-${i}`}
-              className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 px-3 py-1 text-sm font-medium text-amber-900 dark:text-amber-200"
+              className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-1 text-sm font-medium text-blue-900 dark:text-blue-200"
             >
               {item}
               <button
@@ -140,7 +140,7 @@ export const ListInput = memo(function ListInput({ items, onItemsChange, onBack 
           onClick={commitAdd}
           disabled={!addValue.trim()}
           aria-label={t('addItemAriaLabel')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-30 text-white transition-colors shrink-0"
+          className="flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-30 text-white transition-colors shrink-0"
         >
           <Plus size={14} />
         </button>

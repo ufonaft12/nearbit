@@ -92,7 +92,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div className="mx-auto max-w-2xl px-4 pb-4 pt-0">
-        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md shadow-2xl shadow-zinc-900/10 dark:shadow-zinc-950/40 px-4 py-3">
+        <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-700/80 bg-white/96 dark:bg-zinc-900/96 backdrop-blur-xl shadow-2xl shadow-black/10 dark:shadow-black/40 px-4 py-3">
 
           {/* Voice command status toast */}
           {pendingAddLabel && (
@@ -129,7 +129,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
             <button
               type="button"
               onClick={() => dispatch(clearBasket())}
-              className="text-xs text-zinc-400 hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30"
+              className="text-xs text-zinc-400 hover:text-red-500 transition-colors px-2.5 py-1 rounded-full hover:bg-red-50 dark:hover:bg-red-950/30 border border-transparent hover:border-red-200 dark:hover:border-red-900"
             >
               {t('clearAll')}
             </button>
@@ -140,7 +140,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
             {items.map((item) => (
               <span
                 key={item.id}
-                className="inline-flex items-center gap-1 shrink-0 rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-xs text-zinc-700 dark:text-zinc-300"
+                className="inline-flex items-center gap-1 shrink-0 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300"
               >
                 {item.name}
                 {item.price != null && (
@@ -162,7 +162,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
 
           {/* Multi-store Waze picker */}
           {multiStore && showStorePicker && (
-            <div className="mb-2.5 flex flex-col gap-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-2">
+            <div className="mb-2.5 flex flex-col gap-1 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-2">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 px-1">
                 {t('chooseStore')}
               </p>
@@ -171,7 +171,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
                   key={store.storeId}
                   type="button"
                   onClick={() => { openSingleWaze(store); setShowStorePicker(false); }}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors text-left"
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors text-left"
                 >
                   <Navigation size={14} className="shrink-0" />
                   <span className="truncate">{store.storeName}</span>
@@ -187,7 +187,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
                 type="button"
                 onClick={() => setShowStorePicker((v) => !v)}
                 aria-expanded={showStorePicker}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold py-2.5 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white text-sm font-semibold py-2.5 transition-all shadow-sm"
               >
                 <Navigation size={15} />
                 {t('waze')}
@@ -197,7 +197,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
               <button
                 type="button"
                 onClick={() => openSingleWaze(uniqueStores[0])}
-                className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold py-2.5 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white text-sm font-semibold py-2.5 transition-all shadow-sm"
               >
                 <Navigation size={15} /> {t('waze')}
               </button>
@@ -206,7 +206,7 @@ export function BasketFloatingBar({ pendingAddLabel }: Props) {
             <button
               type="button"
               onClick={shareOnWhatsApp}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 text-white text-sm font-semibold py-2.5 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white text-sm font-semibold py-2.5 transition-all shadow-sm"
             >
               <WhatsAppIcon />
               {t('shareWhatsApp')}
