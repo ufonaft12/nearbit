@@ -3,13 +3,20 @@
 import { useState } from "react";
 import { Search, Tag, MoreHorizontal } from "lucide-react";
 import type { Product } from "@/types/database";
+import type { MarketComparison } from "@/lib/actions/market";
+import MarketComparisonCell from "./MarketComparisonCell";
 
 interface ProductsTableProps {
   products: Product[];
+  marketData?: Record<string, MarketComparison>;
   onSelectForTags?: (products: Product[]) => void;
 }
 
-export default function ProductsTable({ products, onSelectForTags }: ProductsTableProps) {
+export default function ProductsTable({
+  products,
+  marketData,
+  onSelectForTags,
+}: ProductsTableProps) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -37,6 +44,8 @@ export default function ProductsTable({ products, onSelectForTags }: ProductsTab
       setSelected(new Set(filtered.map((p) => p.id)));
     }
   };
+
+  const hasMarketData = marketData && Object.keys(marketData).length > 0;
 
   return (
     <div className="space-y-4">
@@ -85,6 +94,12 @@ export default function ProductsTable({ products, onSelectForTags }: ProductsTab
               <th className="px-4 py-3 text-left">Название</th>
               <th className="px-4 py-3 text-left">Barcode</th>
               <th className="px-4 py-3 text-right">Price</th>
+              {hasMarketData && (
+                <th className="px-4 py-3 text-left">
+                  Market Comparison
+                  <span className="ml-1 text-slate-400 normal-case font-normal">↓ best / delta</span>
+                </th>
+              )}
               <th className="px-4 py-3 text-center">Status</th>
               <th className="px-4 py-3" />
             </tr>
@@ -92,7 +107,7 @@ export default function ProductsTable({ products, onSelectForTags }: ProductsTab
           <tbody className="divide-y divide-slate-100 bg-white">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-slate-400">
+                <td colSpan={hasMarketData ? 8 : 7} className="py-12 text-center text-slate-400">
                   No products found.
                 </td>
               </tr>
@@ -101,12 +116,24 @@ export default function ProductsTable({ products, onSelectForTags }: ProductsTab
                 const displayName =
                   product.name_he ?? product.normalized_name ?? product.raw_name;
                 const displayPrice = product.sale_price ?? product.price;
+                const comparison = marketData?.[product.id];
+
+                // Highlight row if our price is 10%+ above market average
+                const isPricedHighAboveMarket =
+                  comparison &&
+                  displayPrice !== null &&
+                  comparison.market_avg > 0 &&
+                  displayPrice > comparison.market_avg * 1.1;
 
                 return (
                   <tr
                     key={product.id}
                     className={`hover:bg-slate-50 transition-colors ${
-                      selected.has(product.id) ? "bg-brand-50" : ""
+                      selected.has(product.id)
+                        ? "bg-brand-50"
+                        : isPricedHighAboveMarket
+                        ? "bg-red-50"
+                        : ""
                     }`}
                   >
                     <td className="pl-4 pr-2 py-3">
@@ -139,6 +166,15 @@ export default function ProductsTable({ products, onSelectForTags }: ProductsTab
                         </span>
                       )}
                     </td>
+                    {hasMarketData && (
+                      <td className="px-4 py-3">
+                        <MarketComparisonCell
+                          productId={product.id}
+                          ourPrice={displayPrice}
+                          comparison={comparison}
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -163,9 +199,18 @@ export default function ProductsTable({ products, onSelectForTags }: ProductsTab
         </table>
       </div>
 
-      <p className="text-xs text-slate-400">
-        Showing {filtered.length} of {products.length} products
-      </p>
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-slate-400">
+        <span>Showing {filtered.length} of {products.length} products</span>
+        {hasMarketData && (
+          <span className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-200 inline-block" />
+              Price 10%+ above market
+            </span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
