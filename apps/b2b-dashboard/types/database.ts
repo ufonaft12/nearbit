@@ -127,41 +127,17 @@ export interface Database {
       };
 
       // ----------------------------------------------------------
-      // GLOBAL_MARKET_PRICES — aggregated B2C chain data
-      // Populated by the B2C scraper; read-only for B2B merchants.
-      // ----------------------------------------------------------
-      global_market_prices: {
-        Row: {
-          id: number;
-          store_id: string;
-          barcode: string | null;
-          name_he: string;
-          name_en: string | null;
-          price: number;
-          chain: string | null;
-          city: string | null;
-          lat: number | null;
-          lng: number | null;
-          scraped_at: string;
-          embedding: number[] | null; // vector(1536)
-        };
-        Insert: Omit<
-          Database["public"]["Tables"]["global_market_prices"]["Row"],
-          "id" | "scraped_at"
-        > & { id?: number };
-        Update: Partial<Database["public"]["Tables"]["global_market_prices"]["Insert"]>;
-      };
-
-      // ----------------------------------------------------------
-      // PRODUCT_MATCHES — cached AI / barcode matching results
-      // Prevents running the expensive LLM call on every page load.
+      // PRODUCT_MATCHES — cached AI / pgvector match results
+      // Maps a merchant product (no barcode) → closest competitor
+      // product already in the shared products table.
+      // Products WITH barcodes are matched in SQL directly.
       // ----------------------------------------------------------
       product_matches: {
         Row: {
           id: number;
-          merchant_product_id: string;
-          market_price_id: number;
-          match_method: "barcode" | "vector" | "llm";
+          merchant_product_id: string;     // FK → products(id)
+          competitor_product_id: string;   // FK → products(id) in another store
+          match_method: "vector" | "llm";
           confidence: number | null;
           matched_at: string;
         };
@@ -180,7 +156,6 @@ export type Store = Database["public"]["Tables"]["stores"]["Row"];
 export type Product = Database["public"]["Tables"]["products"]["Row"];
 export type Category = Database["public"]["Tables"]["categories"]["Row"];
 export type PriceHistory = Database["public"]["Tables"]["price_history"]["Row"];
-export type GlobalMarketPrice = Database["public"]["Tables"]["global_market_prices"]["Row"];
 export type ProductMatch = Database["public"]["Tables"]["product_matches"]["Row"];
 
 // Shape of a single row parsed from a B2B CSV/Excel upload.
