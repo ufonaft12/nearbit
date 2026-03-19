@@ -6,7 +6,7 @@ export function makeProduct(overrides: Partial<Product> = {}): Product {
   return {
     id: "prod-1",
     store_id: "store-1",
-    pos_item_id: null,
+    pos_item_id: "pos-item-1",
     raw_name: "Test Product",
     raw_price: null,
     raw_quantity: null,
@@ -24,7 +24,7 @@ export function makeProduct(overrides: Partial<Product> = {}): Product {
     quantity: null,
     unit: null,
     barcode: "1234567890",
-    last_synced_at: null,
+    last_synced_at: "2024-01-01T00:00:00Z",
     sync_hash: null,
     is_available: true,
     image_url: null,
