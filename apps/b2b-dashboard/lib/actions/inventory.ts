@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { parseUploadedFile } from "@/lib/utils/excel-parser";
+import type { ParseResult } from "@/lib/utils/excel-parser";
 import { withTrace } from "@/lib/langfuse/client";
 import type { ProductUploadRow } from "@/types/database";
 
@@ -61,19 +62,23 @@ export interface UploadResult {
   inserted: number;
   skipped: number;
   errors: string[];
+  normalizedUnits: number; // rows where unit was auto-mapped (e.g. "יח'" → "pcs")
+  encodingFixed: boolean;  // true when CSV was re-decoded from Windows-1255
 }
 
 export async function uploadInventoryAction(
   formData: FormData
 ): Promise<UploadResult> {
   const file = formData.get("file") as File | null;
+  const EMPTY: UploadResult = { inserted: 0, skipped: 0, errors: [], normalizedUnits: 0, encodingFixed: false };
+
   if (!file || file.size === 0) {
-    return { inserted: 0, skipped: 0, errors: ["No file provided."] };
+    return { ...EMPTY, errors: ["No file provided."] };
   }
 
   const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
   if (file.size > MAX_SIZE) {
-    return { inserted: 0, skipped: 0, errors: ["File exceeds 10 MB limit."] };
+    return { ...EMPTY, errors: ["File exceeds 10 MB limit."] };
   }
 
   const ALLOWED_TYPES = [
@@ -83,7 +88,7 @@ export async function uploadInventoryAction(
   ];
   const nameOk = /\.(csv|xlsx|xls)$/i.test(file.name);
   if (!ALLOWED_TYPES.includes(file.type) && !nameOk) {
-    return { inserted: 0, skipped: 0, errors: ["Only CSV and Excel files are allowed."] };
+    return { ...EMPTY, errors: ["Only CSV and Excel files are allowed."] };
   }
 
   return withTrace(
@@ -96,21 +101,19 @@ export async function uploadInventoryAction(
 
       // 1. Parse file
       const parseSpan = trace.span({ name: "parse-file" });
-      let rows: ProductUploadRow[];
+      let parsed: ParseResult;
       try {
-        rows = await parseUploadedFile(file);
-        parseSpan.end({ output: { rowCount: rows.length } });
+        parsed = await parseUploadedFile(file);
+        parseSpan.end({ output: { rowCount: parsed.rows.length, normalizedUnits: parsed.normalizedUnits, encodingFixed: parsed.encodingFixed } });
       } catch (err) {
         parseSpan.end({ output: { error: String(err) } });
-        return {
-          inserted: 0,
-          skipped: 0,
-          errors: [`File parse error: ${String(err)}`],
-        };
+        return { ...EMPTY, errors: [`File parse error: ${String(err)}`] };
       }
 
+      const { rows, normalizedUnits, encodingFixed } = parsed;
+
       if (rows.length === 0) {
-        return { inserted: 0, skipped: 0, errors: ["File contained no valid rows."] };
+        return { ...EMPTY, errors: ["File contained no valid rows."] };
       }
 
       // 2. Smart category mapping (LangChain placeholder)
@@ -183,12 +186,8 @@ export async function uploadInventoryAction(
       dbSpan.end({ output: { inserted, skipped, errors } });
       revalidatePath("/business/inventory");
 
-      return { inserted, skipped, errors };
+      return { inserted, skipped, errors, normalizedUnits, encodingFixed };
     },
     { fileName: file.name }
-  ).catch((err): UploadResult => ({
-    inserted: 0,
-    skipped: 0,
-    errors: [String(err)],
-  }));
+  ).catch((err): UploadResult => ({ ...EMPTY, errors: [String(err)] }));
 }

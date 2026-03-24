@@ -1,16 +1,25 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { uploadInventoryAction } from "@/lib/actions/inventory";
 import type { UploadResult } from "@/lib/actions/inventory";
+import UploadResults from "./UploadResults";
 
 export default function UploadForm() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const resetForm = () => {
+    setFile(null);
+    setFileName("");
+    setResult(null);
+    if (inputRef.current) inputRef.current.value = "";
+  };
 
   const handleFile = (f: File) => {
     const allowed = [
@@ -18,15 +27,17 @@ export default function UploadForm() {
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "application/vnd.ms-excel",
     ];
+    const EMPTY_RESULT = { inserted: 0, skipped: 0, normalizedUnits: 0, encodingFixed: false };
     if (!allowed.includes(f.type) && !f.name.match(/\.(csv|xlsx|xls)$/i)) {
-      setResult({ inserted: 0, skipped: 0, errors: ["Please upload a CSV or Excel file."] });
+      setResult({ ...EMPTY_RESULT, errors: ["Please upload a CSV or Excel file."] });
       return;
     }
     if (f.size > 10 * 1024 * 1024) {
-      setResult({ inserted: 0, skipped: 0, errors: ["File exceeds 10 MB limit."] });
+      setResult({ ...EMPTY_RESULT, errors: ["File exceeds 10 MB limit."] });
       return;
     }
     setFile(f);
+    setFileName(f.name);
     setResult(null);
   };
 
@@ -49,6 +60,11 @@ export default function UploadForm() {
       setResult(res);
     });
   };
+
+  // After upload completes, replace the entire form with the results view
+  if (result) {
+    return <UploadResults result={result} fileName={fileName} onReset={resetForm} />;
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -131,34 +147,6 @@ export default function UploadForm() {
         )}
       </button>
 
-      {/* Result */}
-      {result && (
-        <div
-          className={`rounded-lg border p-4 space-y-1 text-sm ${
-            result.errors.length > 0
-              ? "bg-yellow-50 border-yellow-200"
-              : "bg-emerald-50 border-emerald-200"
-          }`}
-        >
-          <div className="flex items-center gap-2 font-medium text-slate-700">
-            {result.errors.length === 0 ? (
-              <CheckCircle size={16} className="text-emerald-600" />
-            ) : (
-              <XCircle size={16} className="text-yellow-600" />
-            )}
-            Upload complete
-          </div>
-          <p className="text-slate-600">
-            {result.inserted} product{result.inserted !== 1 ? "s" : ""} imported
-            {result.skipped > 0 && `, ${result.skipped} skipped`}.
-          </p>
-          {result.errors.map((err, i) => (
-            <p key={i} className="text-red-600 text-xs">
-              {err}
-            </p>
-          ))}
-        </div>
-      )}
     </form>
   );
 }

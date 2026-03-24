@@ -54,34 +54,48 @@ function resolveColumn(
   return headers.find((h) => aliases.includes(h.toLowerCase()));
 }
 
+export interface ParseResult {
+  rows: ProductUploadRow[];
+  normalizedUnits: number; // rows where a Hebrew/Russian unit was mapped to a DB enum
+  encodingFixed: boolean;  // true when windows-1255 fallback was used for CSV
+}
+
 function mapRow(
   raw: Record<string, unknown>,
   headers: string[]
-): ProductUploadRow | null {
+): { row: ProductUploadRow | null; unitNormalized: boolean } {
   const get = (field: keyof ProductUploadRow) => {
     const col = resolveColumn(headers, field);
     return col ? raw[col] : undefined;
   };
 
   const name_he = String(get("name_he") ?? "").trim();
-  if (!name_he) return null; // required
+  if (!name_he) return { row: null, unitNormalized: false };
 
   const rawPrice = get("price");
   const price = parseFloat(String(rawPrice).replace(/[^\d.]/g, ""));
-  if (isNaN(price)) return null;
+  if (isNaN(price)) return { row: null, unitNormalized: false };
+
+  const rawUnit = String(get("unit") ?? "").trim() || undefined;
+  // A unit was "normalized" only when the file had a non-empty, non-standard value
+  // that we successfully mapped (e.g. "יח'" → "pcs"). Defaulting undefined → "pcs" is not counted.
+  const unitNormalized = !!rawUnit && !VALID_UNITS.has(rawUnit);
 
   return {
-    name_he,
-    name_ru: String(get("name_ru") ?? "").trim() || undefined,
-    name_en: String(get("name_en") ?? "").trim() || undefined,
-    barcode:  String(get("barcode")  ?? "").trim() || undefined,
-    category: String(get("category") ?? "").trim() || undefined,
-    price,
-    unit: normalizeUnit(String(get("unit") ?? "").trim() || undefined),
+    row: {
+      name_he,
+      name_ru: String(get("name_ru") ?? "").trim() || undefined,
+      name_en: String(get("name_en") ?? "").trim() || undefined,
+      barcode:  String(get("barcode")  ?? "").trim() || undefined,
+      category: String(get("category") ?? "").trim() || undefined,
+      price,
+      unit: normalizeUnit(rawUnit),
+    },
+    unitNormalized,
   };
 }
 
-export async function parseUploadedFile(file: File): Promise<ProductUploadRow[]> {
+export async function parseUploadedFile(file: File): Promise<ParseResult> {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
 
@@ -97,25 +111,31 @@ export async function parseUploadedFile(file: File): Promise<ProductUploadRow[]>
       headers[col - 1] = String(cell.value ?? "");
     });
 
-    const rows: Record<string, unknown>[] = [];
+    const rawRows: Record<string, unknown>[] = [];
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
       const obj: Record<string, unknown> = {};
       row.eachCell((cell, col) => {
         obj[headers[col - 1]] = cell.value;
       });
-      rows.push(obj);
+      rawRows.push(obj);
     });
 
-    return rows.flatMap((row) => {
-      const mapped = mapRow(row, headers);
-      return mapped ? [mapped] : [];
+    let normalizedUnits = 0;
+    const rows = rawRows.flatMap((raw) => {
+      const { row, unitNormalized } = mapRow(raw, headers);
+      if (!row) return [];
+      if (unitNormalized) normalizedUnits++;
+      return [row];
     });
+
+    return { rows, normalizedUnits, encodingFixed: false };
   }
 
   // CSV path — try UTF-8 first; if Hebrew chars are garbled, retry with Windows-1255
   // (most Israeli POS software exports CSV in Windows-1255 / cp1255)
   let text = new TextDecoder("utf-8").decode(bytes);
+  let encodingFixed = false;
   // Heuristic: if we see replacement chars (U+FFFD) but no Hebrew Unicode range,
   // the file is likely Windows-1255 encoded
   const hasReplacement = text.includes("\uFFFD");
@@ -123,18 +143,25 @@ export async function parseUploadedFile(file: File): Promise<ProductUploadRow[]>
   if (hasReplacement && !hasHebrew) {
     try {
       text = new TextDecoder("windows-1255").decode(bytes);
+      encodingFixed = true;
     } catch {
       // windows-1255 not supported in this environment — keep UTF-8 decode
     }
   }
+
   const parsed = Papa.parse<Record<string, unknown>>(text, {
     header: true,
     skipEmptyLines: true,
   });
 
   const headers = parsed.meta.fields ?? [];
-  return parsed.data.flatMap((row) => {
-    const mapped = mapRow(row, headers);
-    return mapped ? [mapped] : [];
+  let normalizedUnits = 0;
+  const rows = parsed.data.flatMap((raw) => {
+    const { row, unitNormalized } = mapRow(raw, headers);
+    if (!row) return [];
+    if (unitNormalized) normalizedUnits++;
+    return [row];
   });
+
+  return { rows, normalizedUnits, encodingFixed };
 }
