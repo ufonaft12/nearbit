@@ -1,0 +1,51 @@
+"use client";
+
+import { createContext, useContext, useOptimistic, useTransition } from "react";
+import type { Locale } from "@/i18n/request";
+import { getDir } from "@/i18n/request";
+
+interface LocaleContextValue {
+  locale: Locale;
+  dir: "ltr" | "rtl";
+  setLocale: (locale: Locale) => void;
+}
+
+const LocaleContext = createContext<LocaleContextValue>({
+  locale: "he",
+  dir: "rtl",
+  setLocale: () => {},
+});
+
+export function useLocale() {
+  return useContext(LocaleContext);
+}
+
+async function persistLocale(locale: Locale) {
+  await fetch(`/api/set-locale?locale=${locale}`, { method: "POST" });
+}
+
+export function LocaleProvider({
+  children,
+  initialLocale,
+}: {
+  children: React.ReactNode;
+  initialLocale: Locale;
+}) {
+  const [, startTransition] = useTransition();
+  const [locale, setOptimisticLocale] = useOptimistic<Locale>(initialLocale);
+
+  const setLocale = (next: Locale) => {
+    startTransition(async () => {
+      setOptimisticLocale(next);
+      await persistLocale(next);
+      // Full navigation reload so server components re-render with new locale
+      window.location.reload();
+    });
+  };
+
+  return (
+    <LocaleContext.Provider value={{ locale, dir: getDir(locale), setLocale }}>
+      {children}
+    </LocaleContext.Provider>
+  );
+}

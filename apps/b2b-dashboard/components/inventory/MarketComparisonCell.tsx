@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { TrendingUp, TrendingDown, RefreshCw, ChevronDown, Clock } from "lucide-react";
 import { matchMarketPriceAction } from "@/lib/actions/market";
 import type { MarketComparison } from "@/lib/actions/market";
@@ -24,7 +24,11 @@ function formatStaleness(isoDate: string | null | undefined): string | null {
   return `${Math.floor(diffD / 7)}w ago`;
 }
 
-export default function MarketComparisonCell({ productId, ourPrice, comparison }: Props) {
+const MarketComparisonCell = memo(function MarketComparisonCell({
+  productId,
+  ourPrice,
+  comparison,
+}: Props) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [localError, setLocalError] = useState<string | null>(null);
@@ -42,32 +46,51 @@ export default function MarketComparisonCell({ productId, ourPrice, comparison }
     return () => document.removeEventListener("mousedown", handler);
   }, [popoverOpen]);
 
-  if (!comparison || ourPrice === null) {
-    return <span className="text-xs text-slate-300 italic">—</span>;
-  }
+  const togglePopover = useCallback(() => setPopoverOpen((v) => !v), []);
 
-  const delta = ourPrice - comparison.best_price;
-  const isAboveMarket = delta > 0;
-  const aboveAvgPct =
-    comparison.market_avg > 0
-      ? ((ourPrice - comparison.market_avg) / comparison.market_avg) * 100
-      : 0;
-
-  // Most recent price update across the top-3 competitors
-  const newestUpdate = comparison.competitors
-    ?.map((c) => c.price_updated_at)
-    .filter(Boolean)
-    .sort()
-    .at(-1);
-  const stalenessLabel = formatStaleness(newestUpdate);
-
-  const handleMatchMarket = () => {
+  const handleMatchMarket = useCallback(() => {
     setLocalError(null);
     startTransition(async () => {
       const result = await matchMarketPriceAction(productId);
       if (!result.success) setLocalError(result.error ?? "Failed");
     });
-  };
+  }, [productId]);
+
+  // Derived values — only recompute when props change
+  const { delta, isAboveMarket, aboveAvgPct, stalenessLabel, matchTargetPrice } =
+    useMemo(() => {
+      if (!comparison || ourPrice === null) {
+        return {
+          delta: 0,
+          isAboveMarket: false,
+          aboveAvgPct: 0,
+          stalenessLabel: null,
+          matchTargetPrice: "0.00",
+        };
+      }
+      const d = ourPrice - comparison.best_price;
+      const avgPct =
+        comparison.market_avg > 0
+          ? ((ourPrice - comparison.market_avg) / comparison.market_avg) * 100
+          : 0;
+      const newestUpdate = comparison.competitors
+        ?.map((c) => c.price_updated_at)
+        .filter(Boolean)
+        .sort()
+        .at(-1);
+      const target = Math.max(0.01, Math.round((comparison.market_avg - 0.1) * 100) / 100);
+      return {
+        delta: d,
+        isAboveMarket: d > 0,
+        aboveAvgPct: avgPct,
+        stalenessLabel: formatStaleness(newestUpdate),
+        matchTargetPrice: target.toFixed(2),
+      };
+    }, [comparison, ourPrice]);
+
+  if (!comparison || ourPrice === null) {
+    return <span className="text-xs text-slate-300 italic">—</span>;
+  }
 
   return (
     <div ref={containerRef} className="relative flex items-center gap-2 min-w-[160px]">
@@ -87,7 +110,7 @@ export default function MarketComparisonCell({ productId, ourPrice, comparison }
 
       {/* View Details toggle */}
       <button
-        onClick={() => setPopoverOpen((v) => !v)}
+        onClick={togglePopover}
         className="p-0.5 text-slate-400 hover:text-brand-600 transition-colors rounded"
         title="View competitor details"
       >
@@ -102,10 +125,7 @@ export default function MarketComparisonCell({ productId, ourPrice, comparison }
         <button
           onClick={handleMatchMarket}
           disabled={isPending}
-          title={`Set price to market average − ₪0.10 (₪${Math.max(
-            0.01,
-            Math.round((comparison.market_avg - 0.1) * 100) / 100
-          ).toFixed(2)})`}
+          title={`Set price to market average − ₪0.10 (₪${matchTargetPrice})`}
           className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium
                      bg-brand-50 text-brand-700 hover:bg-brand-100
                      border border-brand-200 rounded-md transition-colors
@@ -123,9 +143,9 @@ export default function MarketComparisonCell({ productId, ourPrice, comparison }
       {/* ── Competitor Details Popover ───────────────────────────── */}
       {popoverOpen && (
         <div
-          className="absolute left-0 top-full mt-1.5 z-50
+          className="absolute start-0 top-full mt-1.5 z-50
                      w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-3
-                     text-left"
+                     text-start"
         >
           {/* Header row */}
           <div className="flex items-center justify-between mb-2">
@@ -134,14 +154,12 @@ export default function MarketComparisonCell({ productId, ourPrice, comparison }
               {comparison.competitor_count !== 1 ? "s" : ""}
             </p>
             <div className="flex items-center gap-2">
-              {/* Staleness badge */}
               {stalenessLabel && (
                 <span className="flex items-center gap-0.5 text-[10px] text-slate-400">
                   <Clock size={9} />
                   {stalenessLabel}
                 </span>
               )}
-              {/* % vs average */}
               {aboveAvgPct > 0 ? (
                 <span className="text-[10px] font-bold text-red-500">
                   +{aboveAvgPct.toFixed(0)}% avg
@@ -192,4 +210,6 @@ export default function MarketComparisonCell({ productId, ourPrice, comparison }
       )}
     </div>
   );
-}
+});
+
+export default MarketComparisonCell;

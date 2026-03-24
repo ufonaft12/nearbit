@@ -171,5 +171,9 @@ export async function uploadInventoryAction(
       return { inserted, skipped, errors };
     },
     { fileName: file.name }
-  );
+  ).catch((err): UploadResult => ({
+    inserted: 0,
+    skipped: 0,
+    errors: [String(err)],
+  }));
 }

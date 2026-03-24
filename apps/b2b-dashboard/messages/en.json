@@ -1,0 +1,73 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "inventory": "Inventory",
+    "priceTags": "Price Tags",
+    "settings": "Settings",
+    "signOut": "Sign out"
+  },
+  "inventory": {
+    "title": "Inventory",
+    "subtitle": "Manage your product catalog",
+    "uploadButton": "Upload Inventory",
+    "searchPlaceholder": "Search by name or barcode…",
+    "generateTags": "Generate tags ({count})",
+    "noProducts": "No products found.",
+    "showing": "Showing {filtered} of {total} products",
+    "priceAboveMarket": "Price 10%+ above market",
+    "columns": {
+      "productName": "Product Name",
+      "name": "Name",
+      "barcode": "Barcode",
+      "price": "Price",
+      "marketComparison": "Market Comparison",
+      "marketSubtitle": "↓ best / delta",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "market": {
+      "best": "best",
+      "competitors": "{count} competitor",
+      "competitorsPlural": "{count} competitors",
+      "marketAverage": "Market average",
+      "match": "Match",
+      "matchTitle": "Set price to market average − ₪0.10 (₪{price})",
+      "aboveAvg": "+{pct}% avg",
+      "belowAvg": "{pct}% avg",
+      "sale": "Sale"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Overview of your store performance"
+  },
+  "priceTags": {
+    "title": "Price Tags",
+    "subtitle": "Generate and print price tags"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Manage your store settings"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit"
+  }
+}
