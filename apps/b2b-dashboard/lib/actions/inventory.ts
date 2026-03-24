@@ -71,6 +71,21 @@ export async function uploadInventoryAction(
     return { inserted: 0, skipped: 0, errors: ["No file provided."] };
   }
 
+  const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+  if (file.size > MAX_SIZE) {
+    return { inserted: 0, skipped: 0, errors: ["File exceeds 10 MB limit."] };
+  }
+
+  const ALLOWED_TYPES = [
+    "text/csv",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+  ];
+  const nameOk = /\.(csv|xlsx|xls)$/i.test(file.name);
+  if (!ALLOWED_TYPES.includes(file.type) && !nameOk) {
+    return { inserted: 0, skipped: 0, errors: ["Only CSV and Excel files are allowed."] };
+  }
+
   return withTrace(
     "inventory-upload",
     async (trace) => {

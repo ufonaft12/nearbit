@@ -2,6 +2,38 @@ import ExcelJS from "exceljs";
 import Papa from "papaparse";
 import type { ProductUploadRow } from "@/types/database";
 
+// Maps common Hebrew/Russian unit strings → valid DB enum values.
+// DB CHECK: unit IN ('kg', 'g', 'liter', 'ml', 'pcs', 'pack', 'other')
+const UNIT_MAP: Record<string, string> = {
+  // Hebrew
+  "ק\"ג": "kg", "קג": "kg", "ק.ג": "kg", "ק'ג": "kg",
+  "גרם": "g", "גר": "g", "גר'": "g",
+  "ליטר": "liter", "ל'": "liter", "ל\"ר": "liter",
+  "מ\"ל": "ml", "מל": "ml",
+  "יח'": "pcs", "יח\"ם": "pcs", "יחידה": "pcs", "יחידות": "pcs", "יח": "pcs",
+  "חבילה": "pack", "חבילות": "pack",
+  // Russian
+  "кг": "kg", "г": "g", "гр": "g", "грамм": "g",
+  "л": "liter", "литр": "liter", "литров": "liter",
+  "мл": "ml",
+  "шт": "pcs", "штук": "pcs", "шт.": "pcs",
+  "упак": "pack", "упаковка": "pack",
+  // English aliases
+  "kilogram": "kg", "gram": "g", "grams": "g",
+  "litre": "liter", "litres": "liter", "liters": "liter",
+  "piece": "pcs", "pieces": "pcs", "unit": "pcs", "units": "pcs",
+  "package": "pack", "packages": "pack",
+};
+
+const VALID_UNITS = new Set(["kg", "g", "liter", "ml", "pcs", "pack", "other"]);
+
+function normalizeUnit(raw: string | undefined): string {
+  if (!raw) return "pcs";
+  const trimmed = raw.trim();
+  if (VALID_UNITS.has(trimmed)) return trimmed;
+  return UNIT_MAP[trimmed] ?? UNIT_MAP[trimmed.toLowerCase()] ?? "other";
+}
+
 // Flexible column aliases — covers Hebrew, Russian, and English headers.
 // Keys must match ProductUploadRow field names (which now use B2C column names).
 const COLUMN_MAP: Record<keyof ProductUploadRow, string[]> = {
@@ -45,7 +77,7 @@ function mapRow(
     barcode:  String(get("barcode")  ?? "").trim() || undefined,
     category: String(get("category") ?? "").trim() || undefined,
     price,
-    unit: String(get("unit") ?? "").trim() || undefined,
+    unit: normalizeUnit(String(get("unit") ?? "").trim() || undefined),
   };
 }
 
@@ -81,8 +113,20 @@ export async function parseUploadedFile(file: File): Promise<ProductUploadRow[]>
     });
   }
 
-  // CSV path
-  const text = new TextDecoder("utf-8").decode(bytes);
+  // CSV path — try UTF-8 first; if Hebrew chars are garbled, retry with Windows-1255
+  // (most Israeli POS software exports CSV in Windows-1255 / cp1255)
+  let text = new TextDecoder("utf-8").decode(bytes);
+  // Heuristic: if we see replacement chars (U+FFFD) but no Hebrew Unicode range,
+  // the file is likely Windows-1255 encoded
+  const hasReplacement = text.includes("\uFFFD");
+  const hasHebrew = /[\u0590-\u05FF]/.test(text);
+  if (hasReplacement && !hasHebrew) {
+    try {
+      text = new TextDecoder("windows-1255").decode(bytes);
+    } catch {
+      // windows-1255 not supported in this environment — keep UTF-8 decode
+    }
+  }
   const parsed = Papa.parse<Record<string, unknown>>(text, {
     header: true,
     skipEmptyLines: true,

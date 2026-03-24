@@ -19,7 +19,11 @@ export default function UploadForm() {
       "application/vnd.ms-excel",
     ];
     if (!allowed.includes(f.type) && !f.name.match(/\.(csv|xlsx|xls)$/i)) {
-      alert("Please upload a CSV or Excel file.");
+      setResult({ inserted: 0, skipped: 0, errors: ["Please upload a CSV or Excel file."] });
+      return;
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      setResult({ inserted: 0, skipped: 0, errors: ["File exceeds 10 MB limit."] });
       return;
     }
     setFile(f);
