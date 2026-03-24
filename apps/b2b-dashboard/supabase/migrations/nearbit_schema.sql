@@ -25,29 +25,23 @@ create table if not exists public.stores (
   pos_provider text        check (pos_provider in ('morning', 'green_invoice', 'manual', 'other')),
   pos_store_id text,
   is_active    boolean     not null default true,
-  -- geospatial (B2C migration 2)
-  lat          double precision,
-  lng          double precision,
-  -- B2B additions
-  name_heb     text,
-  chain        text,
-  logo_url     text,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()
 );
 
-comment on table  public.stores          is 'Retail stores (makolot) integrated with Nearbit.';
-comment on column public.stores.lat      is 'WGS-84 latitude  (decimal degrees)';
-comment on column public.stores.lng      is 'WGS-84 longitude (decimal degrees)';
-comment on column public.stores.name_heb is 'Hebrew display name set by the merchant via the B2B dashboard.';
-comment on column public.stores.chain    is 'Supermarket chain the store belongs to (optional).';
-
--- Columns that may not exist yet on an existing B2C DB
+-- Add columns that may not exist yet (safe on existing DB, no-op if already present)
 alter table public.stores add column if not exists lat      double precision;
 alter table public.stores add column if not exists lng      double precision;
 alter table public.stores add column if not exists name_heb text;
 alter table public.stores add column if not exists chain    text;
 alter table public.stores add column if not exists logo_url text;
+
+-- Comments run after ALTER so columns are guaranteed to exist
+comment on table  public.stores          is 'Retail stores (makolot) integrated with Nearbit.';
+comment on column public.stores.lat      is 'WGS-84 latitude  (decimal degrees)';
+comment on column public.stores.lng      is 'WGS-84 longitude (decimal degrees)';
+comment on column public.stores.name_heb is 'Hebrew display name set by the merchant via the B2B dashboard.';
+comment on column public.stores.chain    is 'Supermarket chain the store belongs to (optional).';
 
 -- ============================================================
 -- 2. CATEGORIES (B2B)
@@ -120,17 +114,18 @@ create table if not exists public.products (
   unique (store_id, pos_item_id)
 );
 
+-- Add columns that may not exist yet (safe on existing DB, no-op if already present)
+alter table public.products add column if not exists category_id integer references public.categories(id);
+alter table public.products add column if not exists sale_price  numeric(12, 2);
+alter table public.products add column if not exists sale_until  date;
+alter table public.products add column if not exists image_url   text;
+
+-- Comments run after ALTER so columns are guaranteed to exist
 comment on table  public.products              is 'Product catalog synced from POS + managed via B2B dashboard.';
 comment on column public.products.embedding    is 'text-embedding-3-small (1536-dim) from "{normalized_name} {category} {unit}"';
 comment on column public.products.category_id  is 'B2B category FK — supplements the free-text `category` set by the LLM.';
 comment on column public.products.sale_price   is 'Promotional price set by the merchant. NULL = no active sale.';
 comment on column public.products.sale_until   is 'Date after which sale_price is no longer valid.';
-
--- Columns that may not exist yet on an existing B2C DB
-alter table public.products add column if not exists category_id integer references public.categories(id);
-alter table public.products add column if not exists sale_price  numeric(12, 2);
-alter table public.products add column if not exists sale_until  date;
-alter table public.products add column if not exists image_url   text;
 
 -- ============================================================
 -- 4. INDEXES
@@ -150,10 +145,6 @@ create index if not exists idx_products_embedding
   on public.products
   using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
-
-create index if not exists idx_price_history_product_id  on public.price_history(product_id);
-create index if not exists idx_price_history_store_id    on public.price_history(store_id);
-create index if not exists idx_price_history_recorded_at on public.price_history(recorded_at desc);
 
 -- ============================================================
 -- 5. SHOPPING LISTS (B2C)
@@ -183,8 +174,12 @@ create table if not exists public.price_history (
   recorded_at timestamptz not null default now()
 );
 
+create index if not exists idx_price_history_product_id  on public.price_history(product_id);
+create index if not exists idx_price_history_store_id    on public.price_history(store_id);
+create index if not exists idx_price_history_recorded_at on public.price_history(recorded_at desc);
+
 -- ============================================================
--- 6. TRIGGERS
+-- 7. TRIGGERS
 -- ============================================================
 
 -- Reusable updated_at stamper
