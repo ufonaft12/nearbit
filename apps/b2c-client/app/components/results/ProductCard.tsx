@@ -61,14 +61,6 @@ export const ProductCard = memo(function ProductCard({
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   };
 
-  const trendLabel = trend
-    ? trend.type === 'same'
-      ? t('priceSame')
-      : trend.type === 'down'
-      ? `↓ ₪${Math.abs(trend.delta).toFixed(2)}`
-      : `↑ ₪${trend.delta.toFixed(2)}`
-    : null;
-
   return (
     <li
       className={`rounded-2xl bg-white dark:bg-zinc-900 px-4 py-3.5 flex items-start justify-between gap-4 transition-all shadow-sm ${
@@ -123,20 +115,41 @@ export const ProductCard = memo(function ProductCard({
 
       {/* Right column */}
       <div className="flex flex-col items-end shrink-0 gap-1">
+        {/* Strikethrough old price — only when price dropped */}
+        {trend?.type === 'down' && r.previousPrice != null && (
+          <span className="text-sm text-zinc-400 dark:text-zinc-500 line-through">
+            ₪{r.previousPrice.toFixed(2)}
+          </span>
+        )}
+
         {r.price != null && (
-          <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+          <span className={`text-lg font-bold ${
+            trend?.type === 'down'
+              ? 'text-green-600 dark:text-green-400'
+              : 'text-zinc-900 dark:text-zinc-50'
+          }`}>
             ₪{r.price.toFixed(2)}
           </span>
         )}
-        {trendLabel && (
-          <span
-            className={`text-[11px] font-medium ${
-              trend?.type === 'down' ? 'text-green-600 dark:text-green-400' :
-              trend?.type === 'up'   ? 'text-red-500  dark:text-red-400'   :
-                                       'text-zinc-400'
-            }`}
-          >
-            {trendLabel}
+
+        {/* Discount badge */}
+        {trend?.type === 'down' && (
+          <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400">
+            {t('save', { amount: Math.abs(trend.delta).toFixed(2) })}
+          </span>
+        )}
+
+        {/* Price went up */}
+        {trend?.type === 'up' && (
+          <span className="text-[11px] font-medium text-red-500 dark:text-red-400">
+            ↑ ₪{trend.delta.toFixed(2)}
+          </span>
+        )}
+
+        {/* Same price */}
+        {trend?.type === 'same' && (
+          <span className="text-[11px] font-medium text-zinc-400">
+            {t('priceSame')}
           </span>
         )}
         {r.distanceKm != null && (

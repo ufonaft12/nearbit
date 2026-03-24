@@ -63,7 +63,8 @@
     "lowStock": "{qty} left!",
     "outOfStock": "Out of stock",
     "match": "{score}% match",
-    "priceSame": "→ Same price"
+    "priceSame": "→ Same price",
+    "save": "Save ₪{amount}"
   },
   "basket": {
     "mode": "Basket Mode",

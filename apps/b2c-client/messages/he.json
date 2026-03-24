@@ -63,7 +63,8 @@
     "lowStock": "נשאר {qty}!",
     "outOfStock": "אזל מהמלאי",
     "match": "{score}% התאמה",
-    "priceSame": "← אותו מחיר"
+    "priceSame": "← אותו מחיר",
+    "save": "חסכת ₪{amount}"
   },
   "basket": {
     "mode": "מצב סל",

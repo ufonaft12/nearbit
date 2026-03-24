@@ -63,7 +63,8 @@
     "lowStock": "Осталось {qty}!",
     "outOfStock": "Нет в наличии",
     "match": "{score}% совпадение",
-    "priceSame": "→ Та же цена"
+    "priceSame": "→ Та же цена",
+    "save": "Скидка ₪{amount}"
   },
   "basket": {
     "mode": "Режим корзины",

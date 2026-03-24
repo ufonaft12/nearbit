@@ -45,13 +45,15 @@ type RawRow = {
   unit: string | null;
   barcode: string | null;
   similarity: number;
+  previous_price: number | null;
 };
 
 // ── Shaped product (pre-cache, pre-distance) ──────────────────────────────────
 type ShapedProduct = SearchResult & {
-  storeName: string;
-  storeLat: number | null;
-  storeLng: number | null;
+  storeName:     string;
+  storeLat:      number | null;
+  storeLng:      number | null;
+  previousPrice: number | null;
 };
 
 // ── Item search result (one basket component) ─────────────────────────────────
@@ -210,19 +212,20 @@ async function runItemSearch(item: string, limit: number): Promise<ItemSearchRes
   const products: ShapedProduct[] = rawRows.map((r) => ({
     id: r.id,
     storeId: r.store_id,
-    storeName: storeMap.get(r.store_id)?.name ?? 'Unknown Store',
-    storeLat:  storeMap.get(r.store_id)?.lat  ?? null,
-    storeLng:  storeMap.get(r.store_id)?.lng  ?? null,
+    storeName:     storeMap.get(r.store_id)?.name ?? 'Unknown Store',
+    storeLat:      storeMap.get(r.store_id)?.lat  ?? null,
+    storeLng:      storeMap.get(r.store_id)?.lng  ?? null,
     normalizedName: r.normalized_name,
-    nameHe:   r.name_he,
-    nameRu:   r.name_ru,
-    nameEn:   r.name_en,
-    category: r.category,
-    price:    r.price,
-    quantity: r.quantity,
-    unit:     r.unit,
-    barcode:  r.barcode,
-    similarity: r.similarity,
+    nameHe:        r.name_he,
+    nameRu:        r.name_ru,
+    nameEn:        r.name_en,
+    category:      r.category,
+    price:         r.price,
+    quantity:      r.quantity,
+    unit:          r.unit,
+    barcode:       r.barcode,
+    similarity:    r.similarity,
+    previousPrice: r.previous_price ?? null,
   }));
 
   return { query: item, products };
@@ -328,8 +331,19 @@ function buildBasketResult(
       ? Math.round((complete[complete.length - 1].totalCost - complete[0].totalCost) * 100) / 100
       : 0;
 
+  // Deduplicate products by id — the same DB row can appear in multiple
+  // per-item searches (e.g. a product matching both "milk" and "eggs").
+  const seenIds = new Set<string>();
+  const allProducts = itemResults
+    .flatMap(({ products }) => products)
+    .filter((p) => {
+      if (seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      return true;
+    });
+
   return {
-    allProducts: itemResults.flatMap(({ products }) => products),
+    allProducts,
     basket: {
       items:        itemResults.map((r) => r.query),
       storeOptions: storeOptions.slice(0, 5),
@@ -464,21 +478,22 @@ export async function GET(req: NextRequest) {
     }
 
     const cachedResults: CachedResult[] = allProducts.map((p) => ({
-      id: p.id,
-      storeId: p.storeId,
-      storeName: p.storeName,
+      id:            p.id,
+      storeId:       p.storeId,
+      storeName:     p.storeName,
       normalizedName: p.normalizedName,
-      nameHe:   p.nameHe,
-      nameRu:   p.nameRu,
-      nameEn:   p.nameEn,
-      category: p.category,
-      price:    p.price,
-      quantity: p.quantity,
-      unit:     p.unit,
-      barcode:  p.barcode,
-      similarity: p.similarity,
-      storeLat: p.storeLat,
-      storeLng: p.storeLng,
+      nameHe:        p.nameHe,
+      nameRu:        p.nameRu,
+      nameEn:        p.nameEn,
+      category:      p.category,
+      price:         p.price,
+      quantity:      p.quantity,
+      unit:          p.unit,
+      barcode:       p.barcode,
+      similarity:    p.similarity,
+      storeLat:      p.storeLat,
+      storeLng:      p.storeLng,
+      previousPrice: p.previousPrice ?? null,
     }));
 
     if (redis && !isNear) {
@@ -553,6 +568,7 @@ export async function GET(req: NextRequest) {
     similarity:     r.similarity,
     storeLat:       storeMap.get(r.store_id)?.lat  ?? null,
     storeLng:       storeMap.get(r.store_id)?.lng  ?? null,
+    previousPrice:  r.previous_price ?? null,
   }));
 
   // 5. Near Me: filter to nearby stores then sort by distance ASC.
