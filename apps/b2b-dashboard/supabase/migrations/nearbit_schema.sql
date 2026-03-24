@@ -203,26 +203,40 @@ create trigger trg_products_updated_at
   before update on public.products
   for each row execute function public.set_updated_at();
 
--- B2B price-change audit trigger
-create or replace function public.b2b_log_price_change()
+-- Price-change audit trigger
+-- Runs AFTER UPDATE OF price — only when the price column actually changes.
+-- SECURITY DEFINER lets the function insert into price_history even though
+-- RLS on that table restricts direct inserts to store owners only.
+-- auth.uid() inside a trigger returns the authenticated user who triggered
+-- the UPDATE (i.e. the merchant via the Server Action / Supabase client).
+-- For upserts from the Excel upload action the source will be 'trigger_auto';
+-- the Server Action itself never writes to price_history directly.
+
+-- Drop the old function name if it exists (renamed in this migration)
+drop trigger if exists trg_b2b_price_change    on public.products;
+drop function if exists public.b2b_log_price_change();
+
+create or replace function public.log_price_change()
   returns trigger language plpgsql security definer
 as $$
 begin
+  -- IS DISTINCT FROM handles NULL correctly (NULL → value is a change)
   if new.price is distinct from old.price then
     insert into public.price_history
       (product_id, store_id, old_price, new_price, changed_by, source)
     values
-      (new.id, new.store_id, old.price, new.price, auth.uid(), 'b2b_manual');
+      (new.id, new.store_id, old.price, new.price, auth.uid(), 'trigger_auto');
   end if;
   return new;
 end;
 $$;
 
-drop trigger if exists trg_b2b_price_change on public.products;
+-- Drop old trigger name guard (idempotent re-runs)
+drop trigger if exists trigger_log_price_change on public.products;
 
-create trigger trg_b2b_price_change
+create trigger trigger_log_price_change
   after update of price on public.products
-  for each row execute function public.b2b_log_price_change();
+  for each row execute function public.log_price_change();
 
 -- ============================================================
 -- 8. ROW-LEVEL SECURITY
