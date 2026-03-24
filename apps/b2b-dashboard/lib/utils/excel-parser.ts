@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import Papa from "papaparse";
 import type { ProductUploadRow } from "@/types/database";
 
@@ -56,12 +56,25 @@ export async function parseUploadedFile(file: File): Promise<ProductUploadRow[]>
   const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
 
   if (isExcel) {
-    const workbook = XLSX.read(bytes, { type: "array" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: "",
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const worksheet = workbook.worksheets[0];
+
+    const headers: string[] = [];
+    worksheet.getRow(1).eachCell((cell, col) => {
+      headers[col - 1] = String(cell.value ?? "");
     });
-    const headers = Object.keys(rows[0] ?? {});
+
+    const rows: Record<string, unknown>[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const obj: Record<string, unknown> = {};
+      row.eachCell((cell, col) => {
+        obj[headers[col - 1]] = cell.value;
+      });
+      rows.push(obj);
+    });
+
     return rows.flatMap((row) => {
       const mapped = mapRow(row, headers);
       return mapped ? [mapped] : [];

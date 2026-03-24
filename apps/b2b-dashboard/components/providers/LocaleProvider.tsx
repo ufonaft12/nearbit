@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useContext, useOptimistic, useTransition } from "react";
-import type { Locale } from "@/i18n/request";
-import { getDir } from "@/i18n/request";
+import type { Locale } from "@/i18n/locale";
+import { getDir } from "@/i18n/locale";
 
 interface LocaleContextValue {
   locale: Locale;

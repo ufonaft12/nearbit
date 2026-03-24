@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isValidLocale } from "@/i18n/request";
+import { isValidLocale } from "@/i18n/locale";
 
 /**
  * POST /api/set-locale?locale=he

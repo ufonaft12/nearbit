@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
-import { getDir } from "@/i18n/request";
-import type { Locale } from "@/i18n/request";
+import { getDir } from "@/i18n/locale";
+import type { Locale } from "@/i18n/locale";
 import { LocaleProvider } from "@/components/providers/LocaleProvider";
 import "./globals.css";
 

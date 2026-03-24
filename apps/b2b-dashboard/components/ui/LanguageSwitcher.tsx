@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale } from "@/components/providers/LocaleProvider";
-import type { Locale } from "@/i18n/request";
+import type { Locale } from "@/i18n/locale";
 
 const LABELS: Record<Locale, string> = {
   en: "EN",
