@@ -10,7 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Caching: middleware runs on every matched request and must NOT be cached.
  * The response carries Set-Cookie headers from Supabase to refresh the token.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
