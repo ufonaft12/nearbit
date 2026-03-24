@@ -25,10 +25,13 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session
+  // getSession() reads JWT from cookie — no network round-trip on every request.
+  // getUser() would verify with Supabase Auth server every time (~300ms penalty).
+  // Data security is maintained by RLS on all DB queries.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const { pathname } = request.nextUrl;
 
