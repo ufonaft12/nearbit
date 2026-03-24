@@ -22,9 +22,15 @@ import { makeLangfuseHandler } from '@/lib/ai/langfuse';
 const INTENT_CACHE_TTL = 60 * 60 * 24; // 24 h
 
 const INTENT_PROMPT =
-  "You are a shopping assistant for Nearbit. " +
-  "Analyze if the input is a list of grocery products, a single food item, or a shopping query. " +
-  "Answer only 'YES' or 'NO'.\nInput: {query}";
+  "You are a grocery assistant for an Israeli supermarket app (Nearbit). " +
+  "Decide if the input is a product or grocery search. " +
+  "The app is used in Israel — queries arrive in Hebrew, Russian, English, or a mix. " +
+  "A query is YES if it contains one or more food/grocery/household product names, " +
+  "even if space-separated without commas (e.g. 'חומוס חלב', 'milk bread', 'яйца хлеб'). " +
+  "YES examples: 'חלב', 'eggs', 'молоко', 'חומוס חלב', 'milk bread butter', 'яйца хлеб молоко', 'milk, eggs, hummus', 'olive oil'. " +
+  "NO examples: 'hello', 'what time is it', 'tell me a joke', 'weather in tel aviv', 'open google'. " +
+  "When in doubt about a Hebrew or Russian word, answer YES. " +
+  "Answer only YES or NO.\nInput: {query}";
 
 // Build the chain once at module load (model instance is stateless/reusable)
 const llm   = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
@@ -42,7 +48,8 @@ const chain = PromptTemplate.fromTemplate(INTENT_PROMPT)
  */
 export async function checkProductIntent(query: string, userId?: string): Promise<boolean> {
   const normalized = query.toLowerCase().trim();
-  const cacheKey   = `intent:${createHash('sha256').update(normalized).digest('hex')}`;
+  // v2: key prefix bumped to invalidate stale NO entries from old prompt
+  const cacheKey   = `intent:v2:${createHash('sha256').update(normalized).digest('hex')}`;
 
   // 1. Redis cache check — cached results skip the LLM entirely
   if (redis) {

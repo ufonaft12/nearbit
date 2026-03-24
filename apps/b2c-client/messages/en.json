@@ -9,7 +9,7 @@
   "search": {
     "placeholder": "Search products... (milk, eggs, hummus)\nor enter each product on a new line",
     "ariaLabel": "Search products",
-    "helpText": "Enter to search · Shift+Enter for new line · Voice",
+    "helpText": "Enter for new line · Ctrl+Enter to search · Voice",
     "button": "Search",
     "basketMode": "Basket mode — comparing prices across stores",
     "nearMe": "Near Me",

@@ -9,7 +9,7 @@
   "search": {
     "placeholder": "חפש מוצר... (חלב, ביצים, חומוס)\nאו רשום כל מוצר בשורה חדשה",
     "ariaLabel": "חיפוש מוצרים",
-    "helpText": "Enter לחיפוש · Shift+Enter לשורה חדשה · קול",
+    "helpText": "Enter לשורה חדשה · Ctrl+Enter לחיפוש · קול",
     "button": "חפש",
     "basketMode": "מצב סל — משווה מחירים בין חנויות",
     "nearMe": "קרוב אלי",

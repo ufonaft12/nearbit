@@ -222,19 +222,15 @@ export function SearchBox({
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key !== 'Enter') return;
-      const withMeta = e.ctrlKey || e.metaKey;
-      if (withMeta) {
-        // Ctrl+Enter / Cmd+Enter: always search, regardless of mode
-        e.preventDefault();
-        executeSearch();
-      } else if (inputMode === 'text') {
-        // Plain Enter in text mode: search (standard mobile "Go" / "Search" behavior)
+      // Ctrl+Enter / Cmd+Enter: search from anywhere
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         executeSearch();
       }
-      // Plain Enter in list mode: allow default — inserts a new line
+      // Plain Enter: always insert a new line (allow default)
+      // Users search by clicking the button or Ctrl/Cmd+Enter.
     },
-    [executeSearch, inputMode],
+    [executeSearch],
   );
 
   // ── Voice input ──────────────────────────────────────────────────────────────
@@ -340,8 +336,8 @@ export function SearchBox({
               rows={1}
               maxLength={MAX_QUERY_LENGTH}
               aria-label={tSearch('ariaLabel')}
-              inputMode="search"
-              enterKeyHint="search"
+              inputMode="text"
+              enterKeyHint="enter"
               className="w-full resize-none overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-blue-400/50 shadow-sm transition-shadow"
               style={{ minHeight: '56px' }}
             />
