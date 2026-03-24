@@ -17,7 +17,7 @@ import {
   Mic, MicOff,
   MapPin, MapPinOff, Loader2,
   Search as SearchIcon, Coins, ShoppingBasket,
-  AlertTriangle,
+  AlertTriangle, ListChecks,
 } from 'lucide-react';
 
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
@@ -132,13 +132,7 @@ export function SearchBox({
   // ── List mode handlers ───────────────────────────────────────────────────────
   const handleListItemsChange = useCallback((next: string[]) => {
     setListItems(next);
-    if (next.length === 0) {
-      commit('');
-    } else {
-      const joined = next.filter((s) => s.trim().length >= MIN_QUERY_LENGTH).join(', ');
-      if (joined) commit(joined);
-    }
-  }, [commit]);
+  }, []);
 
   const handleBackToText = useCallback(() => {
     setInputMode('text');
@@ -146,6 +140,16 @@ export function SearchBox({
     commit('');
     setInputValue('');
   }, [commit]);
+
+  const handleSwitchToList = useCallback(() => {
+    const segments = inputValue
+      .split(/[,،\n]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    setListItems(segments);
+    setInputMode('list');
+    debouncedCommit.cancel();
+  }, [inputValue, debouncedCommit]);
 
   // ── Input change handler ─────────────────────────────────────────────────────
   const handleInputChange = useCallback(
@@ -169,10 +173,8 @@ export function SearchBox({
         }
       }
 
-      const normalized = value.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
-      debouncedCommit(normalized);
     },
-    [debouncedCommit, commit],
+    [commit],
   );
 
   // ── Execute search (on Submit / Enter) ───────────────────────────────────────
@@ -249,8 +251,6 @@ export function SearchBox({
       setInputValue((prev) => {
         const next       = prev ? `${prev}\n${transcript}` : transcript;
         const sliced     = next.slice(0, MAX_QUERY_LENGTH);
-        const normalized = sliced.split('\n').map((l: string) => l.trim()).filter(Boolean).join(', ');
-        debouncedCommit(normalized);
         return sliced;
       });
     };
@@ -332,6 +332,20 @@ export function SearchBox({
               className="w-full resize-none overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-blue-400/50 shadow-sm transition-shadow"
               style={{ minHeight: '48px' }}
             />
+          )}
+
+          {/* List mode toggle — text mode only */}
+          {inputMode === 'text' && (
+            <button
+              type="button"
+              onClick={handleSwitchToList}
+              title={tSearch('listMode')}
+              aria-label={tSearch('listMode')}
+              className="absolute bottom-2 left-2 flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors"
+            >
+              <ListChecks size={12} />
+              {tSearch('listMode')}
+            </button>
           )}
 
           {/* Mic controls — text mode only */}
