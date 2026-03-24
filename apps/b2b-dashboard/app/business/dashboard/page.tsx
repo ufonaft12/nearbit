@@ -1,22 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { getStore } from "@/lib/supabase/queries";
 import StatsCard from "@/components/dashboard/StatsCard";
 import { Package, Tag, TrendingDown, TrendingUp } from "lucide-react";
 
-export const dynamic = "force-dynamic";
-
 export default async function DashboardPage() {
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: store } = await supabase
-    .from("stores")
-    .select("id, name, name_heb, city")
-    .eq("owner_id", user!.id)
-    .single();
-
+  const store = await getStore();
   const storeId = store?.id ?? "";
 
   type HistoryRow = {

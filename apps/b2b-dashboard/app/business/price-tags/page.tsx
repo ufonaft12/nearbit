@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import PriceTagPreview from "@/components/price-tags/PriceTagPreview";
 
-export const dynamic = "force-dynamic";
 
 export default async function PriceTagsPage() {
   const supabase = await createClient();
