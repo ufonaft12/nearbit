@@ -1,0 +1,133 @@
+{
+  "header": {
+    "tagline": "/ поиск в местных магазинах"
+  },
+  "theme": {
+    "toLightMode": "Переключить на светлую тему",
+    "toDarkMode": "Переключить на тёмную тему"
+  },
+  "search": {
+    "placeholder": "Поиск товаров... (молоко, яйца, хумус)\nили введите каждый товар с новой строки",
+    "ariaLabel": "Поиск товаров",
+    "helpText": "Enter — новая строка · Ctrl+Enter — поиск · Голос",
+    "button": "Найти",
+    "basketMode": "Режим корзины — сравниваем цены по магазинам",
+    "nearMe": "Рядом",
+    "lowestPrice": "Дешевле всего",
+    "initialHint": "Введите минимум {min} символа — или попробуйте корзину: \"{example}\"",
+    "suggestionsLabel": "Быстрые подсказки",
+    "charCount": "{count} / {max}",
+    "listMode": "Режим списка",
+    "addItemPlaceholder": "Добавить товар...",
+    "addItemAriaLabel": "Добавить товар в список",
+    "removeItemAriaLabel": "Убрать {name} из списка",
+    "backToSearch": "Вернуться к поиску",
+    "listHelpText": "Enter — добавить · Esc — обычный поиск"
+  },
+  "voice": {
+    "stopListening": "Остановить запись",
+    "startListening": "Голосовой ввод",
+    "listeningTitle": "Слушаю… (нажмите для остановки)",
+    "voiceTitle": "Голосовой ввод",
+    "langTitle": "Голос: {lang} — нажмите для переключения",
+    "he": "Иврит",
+    "ru": "Русский",
+    "en": "Английский"
+  },
+  "location": {
+    "ariaLabel": "Поделиться геолокацией",
+    "active": "Геолокация активна — нажмите для обновления",
+    "denied": "Заблокировано — разрешите доступ в настройках браузера",
+    "unavailable": "Геолокация не поддерживается браузером",
+    "requesting": "Запрашиваю геолокацию…",
+    "idle": "Поделитесь геолокацией для ближайших результатов"
+  },
+  "results": {
+    "ariaLabel": "Результаты поиска",
+    "assistant": "Ассистент",
+    "share": "Поделиться",
+    "shareAriaLabel": "Поделиться ответом в WhatsApp",
+    "resultsCount": "{count, plural, one {# результат} few {# результата} other {# результатов}} по запросу \"{query}\"",
+    "productListAriaLabel": "Список товаров",
+    "noResults": "Товары не найдены",
+    "noResultsTip": "Попробуйте другой запрос или запустите <cmd>npm run seed</cmd> для наполнения базы данных.",
+    "loading": "Загрузка результатов"
+  },
+  "product": {
+    "addToBasket": "Добавить {name} в корзину",
+    "removeFromBasket": "Убрать {name} из корзины",
+    "share": "Поделиться",
+    "shareAriaLabel": "Поделиться {name} в WhatsApp",
+    "openInWaze": "Открыть {store} в Waze",
+    "openInMaps": "Открыть {store} в Google Maps",
+    "lowStock": "Осталось {qty}!",
+    "outOfStock": "Нет в наличии",
+    "match": "{score}% совпадение",
+    "priceSame": "→ Та же цена",
+    "save": "Скидка ₪{amount}"
+  },
+  "basket": {
+    "mode": "Режим корзины",
+    "maxSavings": "Максимальная экономия",
+    "shareBasketSummary": "Поделиться корзиной",
+    "itemsFound": "{found}/{total} товаров",
+    "adding": "Добавляю \"{label}\" в корзину…",
+    "itemCount": "{count, plural, one {# товар в корзине} few {# товара в корзине} other {# товаров в корзине}}",
+    "estimated": "Итого:",
+    "stores": "{count, plural, one {# магазин} few {# магазина} other {# магазинов}}",
+    "clearAll": "Очистить всё",
+    "removeItem": "Убрать {name} из корзины",
+    "chooseStore": "Выберите магазин для навигации",
+    "waze": "Поехали! Waze",
+    "shareWhatsApp": "Поделиться корзиной"
+  },
+  "errors": {
+    "connectionTitle": "Ошибка соединения",
+    "connectionMessage": "Не удалось подключиться к серверу. Проверьте соединение и попробуйте снова.",
+    "searchFailed": "Поиск не удался. Попробуйте снова."
+  },
+  "auth": {
+    "signin_title": "Войти",
+    "signup_title": "Создать аккаунт",
+    "email_placeholder": "Адрес электронной почты",
+    "password_placeholder": "Пароль",
+    "signin_submit": "Войти",
+    "signup_submit": "Создать аккаунт",
+    "google_button": "Войти через Google",
+    "switch_to_signup": "Нет аккаунта? Зарегистрироваться",
+    "switch_to_signin": "Уже есть аккаунт? Войти",
+    "loading": "Загрузка…",
+    "check_email": "Проверьте почту — вам отправлена ссылка подтверждения.",
+    "signout": "Выйти",
+    "error_invalid": "Неверный email или пароль."
+  },
+  "profile": {
+    "title": "Мой профиль",
+    "signout": "Выйти",
+    "history_title": "История поиска",
+    "history_empty": "Поисков пока нет",
+    "purchases_title": "Мои покупки",
+    "purchases_empty": "Покупки ещё не записаны",
+    "mark_purchased": "Отметить как купленное",
+    "bought_at": "Куплено {date}",
+    "price_then": "Цена тогда: ₪{price}",
+    "no_analytics": "Данных о ценах пока нет",
+    "edit_profile": "Редактировать профиль",
+    "address_label": "Адрес",
+    "city_label": "Город",
+    "address_placeholder": "Введите адрес (необязательно)",
+    "city_placeholder": "Введите город (необязательно)",
+    "save": "Сохранить",
+    "saving": "Сохраняю…",
+    "saved": "Изменения сохранены!"
+  },
+  "whatsapp": {
+    "productText": "Achi, посмотри что я нашёл на Nearbit! 🛒\n{name} – {price}\n📍 {store}\nСабаба-цена! 🤩",
+    "answerText": "Achi, я спросил Nearbit о \"{query}\" и вот что нашлось:\n\n{answer}\n\n🛒 nearbit.app",
+    "basketHeader": "Achi, вот моя корзина с Nearbit 🛒",
+    "basketTotal": "💰 Итого: ₪{total}",
+    "basketFooter": "Сабаба! 🤩",
+    "basketBestDeal": "Achi, я нашёл самую выгодную корзину на Nearbit! 🧺\n{items}\n🏆 {store}: ₪{total}\nСабаба! 🤩",
+    "basketFallback": "Нашёл корзину \"{query}\" на Nearbit 🛒"
+  }
+}

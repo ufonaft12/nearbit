@@ -1,0 +1,133 @@
+{
+  "header": {
+    "tagline": "/ חיפוש בחנויות שכונתיות"
+  },
+  "theme": {
+    "toLightMode": "עבור למצב בהיר",
+    "toDarkMode": "עבור למצב כהה"
+  },
+  "search": {
+    "placeholder": "חפש מוצר... (חלב, ביצים, חומוס)\nאו רשום כל מוצר בשורה חדשה",
+    "ariaLabel": "חיפוש מוצרים",
+    "helpText": "Enter לשורה חדשה · Ctrl+Enter לחיפוש · קול",
+    "button": "חפש",
+    "basketMode": "מצב סל — משווה מחירים בין חנויות",
+    "nearMe": "קרוב אלי",
+    "lowestPrice": "הכי זול",
+    "initialHint": "הקלד לפחות {min} תווים — או נסה סל: \"{example}\"",
+    "suggestionsLabel": "הצעות מהירות",
+    "charCount": "{count} / {max}",
+    "listMode": "מצב רשימה",
+    "addItemPlaceholder": "הוסף מוצר...",
+    "addItemAriaLabel": "הוסף פריט לרשימה",
+    "removeItemAriaLabel": "הסר {name} מהרשימה",
+    "backToSearch": "חזור לחיפוש רגיל",
+    "listHelpText": "Enter להוספה · Esc לחיפוש רגיל"
+  },
+  "voice": {
+    "stopListening": "עצור האזנה",
+    "startListening": "קלט קולי",
+    "listeningTitle": "מאזין… (לחץ לעצור)",
+    "voiceTitle": "קלט קולי",
+    "langTitle": "קול: {lang} — לחץ להחליף",
+    "he": "עברית",
+    "ru": "רוסית",
+    "en": "אנגלית"
+  },
+  "location": {
+    "ariaLabel": "שתף מיקום",
+    "active": "מיקום פעיל — לחץ לרענן",
+    "denied": "חסום — אפשר מיקום בהגדרות הדפדפן",
+    "unavailable": "מיקום לא נתמך בדפדפן זה",
+    "requesting": "מבקש מיקום…",
+    "idle": "שתף מיקום לתוצאות קרובות"
+  },
+  "results": {
+    "ariaLabel": "תוצאות חיפוש",
+    "assistant": "עוזר",
+    "share": "שתף",
+    "shareAriaLabel": "שתף תשובה בוואטסאפ",
+    "resultsCount": "{count, plural, one {תוצאה אחת} other {{count} תוצאות}} עבור \"{query}\"",
+    "productListAriaLabel": "רשימת מוצרים",
+    "noResults": "לא נמצאו מוצרים",
+    "noResultsTip": "נסה מונח חיפוש אחר, או הרץ <cmd>npm run seed</cmd> למילוי בסיס הנתונים.",
+    "loading": "טוען תוצאות"
+  },
+  "product": {
+    "addToBasket": "הוסף {name} לסל",
+    "removeFromBasket": "הסר {name} מהסל",
+    "share": "שתף",
+    "shareAriaLabel": "שתף {name} בוואטסאפ",
+    "openInWaze": "פתח {store} בוויז",
+    "openInMaps": "פתח {store} בגוגל מפות",
+    "lowStock": "נשאר {qty}!",
+    "outOfStock": "אזל מהמלאי",
+    "match": "{score}% התאמה",
+    "priceSame": "← אותו מחיר",
+    "save": "חסכת ₪{amount}"
+  },
+  "basket": {
+    "mode": "מצב סל",
+    "maxSavings": "חיסכון מקסימלי",
+    "shareBasketSummary": "שתף את הסל",
+    "itemsFound": "{found}/{total} מוצרים",
+    "adding": "מוסיף \"{label}\" לסל…",
+    "itemCount": "{count, plural, one {מוצר אחד בסל} other {{count} מוצרים בסל}}",
+    "estimated": "הערכה:",
+    "stores": "{count, plural, one {חנות אחת} other {{count} חנויות}}",
+    "clearAll": "נקה הכל",
+    "removeItem": "הסר {name} מהסל",
+    "chooseStore": "בחר חנות לניווט",
+    "waze": "יאללה! Waze",
+    "shareWhatsApp": "שתף סל"
+  },
+  "errors": {
+    "connectionTitle": "שגיאת חיבור",
+    "connectionMessage": "לא ניתן להגיע לשרת. בדוק את החיבור ונסה שוב.",
+    "searchFailed": "החיפוש נכשל. נסה שוב."
+  },
+  "auth": {
+    "signin_title": "כניסה",
+    "signup_title": "צור חשבון",
+    "email_placeholder": "כתובת אימייל",
+    "password_placeholder": "סיסמה",
+    "signin_submit": "כנס",
+    "signup_submit": "צור חשבון",
+    "google_button": "המשך עם Google",
+    "switch_to_signup": "אין לך חשבון? הרשם",
+    "switch_to_signin": "כבר יש לך חשבון? כנס",
+    "loading": "טוען…",
+    "check_email": "בדוק את האימייל שלך לקישור אישור.",
+    "signout": "התנתק",
+    "error_invalid": "אימייל או סיסמה שגויים."
+  },
+  "profile": {
+    "title": "הפרופיל שלי",
+    "signout": "התנתק",
+    "history_title": "היסטוריית חיפושים",
+    "history_empty": "עדיין אין חיפושים",
+    "purchases_title": "הקניות שלי",
+    "purchases_empty": "עדיין לא תועדו קניות",
+    "mark_purchased": "סמן כנקנה",
+    "bought_at": "נקנה ב-{date}",
+    "price_then": "מחיר אז: ₪{price}",
+    "no_analytics": "אין נתוני מחיר עדיין",
+    "edit_profile": "עריכת פרופיל",
+    "address_label": "כתובת",
+    "city_label": "עיר",
+    "address_placeholder": "הזן כתובת (לא חובה)",
+    "city_placeholder": "הזן עיר (לא חובה)",
+    "save": "שמור",
+    "saving": "שומר…",
+    "saved": "השינויים נשמרו!"
+  },
+  "whatsapp": {
+    "productText": "אחי, תראה מה מצאתי ב-Nearbit! 🛒\n{name} – {price}\n📍 {store}\nסבבה דיל! 🤩",
+    "answerText": "אחי, שאלתי את Nearbit על \"{query}\" והנה מה שמצאתי:\n\n{answer}\n\n🛒 nearbit.app",
+    "basketHeader": "אחי, הנה הסל שלי מ-Nearbit 🛒",
+    "basketTotal": "💰 סה\"כ: ₪{total}",
+    "basketFooter": "סבבה! 🤩",
+    "basketBestDeal": "אחי, מצאתי את הסל הכי משתלם ב-Nearbit! 🧺\n{items}\n🏆 {store}: ₪{total}\nסבבה! 🤩",
+    "basketFallback": "מצאתי סל \"{query}\" ב-Nearbit 🛒"
+  }
+}

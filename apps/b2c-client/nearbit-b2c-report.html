@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nearbit B2C — Техническое описание проекта</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --blue: #2563eb;
+    --blue-light: #eff6ff;
+    --green: #16a34a;
+    --green-light: #f0fdf4;
+    --red: #dc2626;
+    --red-light: #fef2f2;
+    --amber: #d97706;
+    --amber-light: #fffbeb;
+    --zinc-50: #fafafa;
+    --zinc-100: #f4f4f5;
+    --zinc-200: #e4e4e7;
+    --zinc-500: #71717a;
+    --zinc-700: #3f3f46;
+    --zinc-900: #18181b;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--zinc-900);
+    background: #fff;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* ── Cover page ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 80px 72px;
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 60%, #4f46e5 100%);
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover-badge {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+  }
+  .cover h1 {
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+  .cover h1 span { color: #93c5fd; }
+  .cover-sub {
+    font-size: 18px;
+    color: rgba(255,255,255,0.75);
+    margin-bottom: 48px;
+    max-width: 520px;
+    line-height: 1.5;
+  }
+  .cover-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top: 1px solid rgba(255,255,255,0.2);
+    padding-top: 32px;
+    width: 100%;
+  }
+  .cover-meta-row {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+  }
+  .cover-meta-row strong { color: #fff; min-width: 140px; }
+
+  /* ── Page layout ── */
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 72px 64px;
+  }
+
+  /* ── Section titles ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 48px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--blue);
+  }
+  .section-number {
+    background: var(--blue);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--zinc-900);
+  }
+
+  h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--blue);
+    margin: 20px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin: 12px 0 20px;
+  }
+  thead tr {
+    background: var(--zinc-900);
+    color: #fff;
+  }
+  thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  tbody tr { border-bottom: 1px solid var(--zinc-200); }
+  tbody tr:nth-child(even) { background: var(--zinc-50); }
+  tbody td { padding: 7px 12px; vertical-align: top; }
+  tbody td:first-child { font-weight: 500; white-space: nowrap; }
+
+  /* ── Code blocks ── */
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11.5px;
+    line-height: 1.65;
+    overflow-x: auto;
+    margin: 10px 0 18px;
+  }
+  code {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11.5px;
+    background: var(--zinc-100);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--blue);
+  }
+  pre code { background: transparent; color: inherit; padding: 0; }
+
+  /* syntax highlight helpers */
+  .kw  { color: #c084fc; }
+  .str { color: #86efac; }
+  .cm  { color: #6b7280; font-style: italic; }
+  .num { color: #fb923c; }
+  .type{ color: #67e8f9; }
+  .fn  { color: #fde68a; }
+  .op  { color: #f87171; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .badge-green  { background: var(--green-light);  color: var(--green); }
+  .badge-red    { background: var(--red-light);    color: var(--red); }
+  .badge-blue   { background: var(--blue-light);   color: var(--blue); }
+  .badge-amber  { background: var(--amber-light);  color: var(--amber); }
+
+  /* ── Info box ── */
+  .info-box {
+    background: var(--blue-light);
+    border-left: 4px solid var(--blue);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #1e40af;
+    margin: 12px 0;
+  }
+  .warn-box {
+    background: var(--amber-light);
+    border-left: 4px solid var(--amber);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #92400e;
+    margin: 12px 0;
+  }
+
+  /* ── Pipeline diagram ── */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin: 12px 0 18px;
+    font-size: 11px;
+  }
+  .pipeline-step {
+    background: var(--blue);
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .pipeline-step.cached { background: #059669; }
+  .pipeline-step.llm    { background: #7c3aed; }
+  .pipeline-step.db     { background: #0891b2; }
+  .pipeline-step.out    { background: #374151; }
+  .pipeline-arrow { color: var(--zinc-500); font-size: 14px; }
+
+  /* ── Two-column grid ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+  .card {
+    border: 1px solid var(--zinc-200);
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: var(--zinc-50);
+  }
+  .card h4 { font-size: 12px; font-weight: 700; margin-bottom: 8px; color: var(--zinc-700); }
+
+  /* ── Status table ── */
+  .status-done  { color: var(--green); font-weight: 600; }
+  .status-miss  { color: var(--red);   font-weight: 600; }
+
+  /* ── Print ── */
+  @media print {
+    body { font-size: 11.5px; }
+    .cover { min-height: auto; padding: 60px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover h1 { font-size: 36px; }
+    pre { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pipeline-step { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section-number { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    thead tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    h3 { page-break-after: avoid; }
+    table { page-break-inside: avoid; }
+    pre { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════ COVER ══ -->
+<div class="cover">
+  <div class="cover-badge">Техническая документация</div>
+  <h1>Nearbit <span>B2C</span><br>Полное описание проекта</h1>
+  <p class="cover-sub">
+    Документ для интеграции с B2B-платформой в рамках<br>
+    <strong style="color:#fff">Фазы 3: B2C Bridge</strong> — соединение маколета с покупателями района
+  </p>
+  <div class="cover-meta">
+    <div class="cover-meta-row"><strong>Дата отчёта:</strong> 24 марта 2026</div>
+    <div class="cover-meta-row"><strong>Стек:</strong> Next.js 16 · React 19 · TypeScript 5 · Supabase (pgvector) · Upstash Redis · OpenAI</div>
+    <div class="cover-meta-row"><strong>Назначение:</strong> Передача Gemini для объединения с B2B-планом разработки</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ BODY ══ -->
+<div class="page">
+
+  <!-- ─── 1. Общая информация ─── -->
+  <div class="section-header">
+    <div class="section-number">1</div>
+    <h2>Общая информация о проекте</h2>
+  </div>
+
+  <table>
+    <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
+    <tbody>
+      <tr><td>Название</td><td><code>nearbit</code> — агрегатор цен израильских районных магазинов</td></tr>
+      <tr><td>Фреймворк</td><td>Next.js 16 (App Router), React 19, TypeScript 5</td></tr>
+      <tr><td>База данных</td><td>Supabase (PostgreSQL + pgvector расширение)</td></tr>
+      <tr><td>Кэш / Rate limit</td><td>Upstash Redis (REST API, @upstash/redis)</td></tr>
+      <tr><td>AI / LLM</td><td>OpenAI <code>gpt-4o-mini</code> + <code>text-embedding-3-small</code> (1536 dim) через LangChain</td></tr>
+      <tr><td>Observability</td><td>Langfuse (LangChain CallbackHandler, fire-and-forget flush)</td></tr>
+      <tr><td>State management</td><td>Redux Toolkit (корзина) + TanStack Query (серверное состояние)</td></tr>
+      <tr><td>i18n</td><td>next-intl — иврит (he, RTL), русский (ru), английский (en)</td></tr>
+      <tr><td>UI</td><td>Tailwind CSS v4, Lucide icons, dark mode через next-themes</td></tr>
+      <tr><td>Тесты</td><td>Vitest + @testing-library/react</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── 2. Схема БД ─── -->
+  <div class="section-header">
+    <div class="section-number">2</div>
+    <h2>Схема базы данных (Supabase / PostgreSQL)</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Таблица: stores</h4>
+      <pre><code><span class="type">id</span>       uuid  PK
+<span class="type">name</span>     text
+<span class="type">lat</span>      float8   <span class="cm">-- координаты магазина</span>
+<span class="type">lng</span>      float8</code></pre>
+    </div>
+    <div class="card">
+      <h4>Supabase RPC функции</h4>
+      <pre><code><span class="fn">match_products</span>(
+  query_embedding,
+  match_threshold,
+  match_count
+)
+
+<span class="fn">search_products</span>(
+  ...то же + store_id_filter
+)</code></pre>
+    </div>
+  </div>
+
+  <h3>Таблица: products</h3>
+  <table>
+    <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>id</td><td>uuid PK</td><td>Nearbit-идентификатор товара</td></tr>
+      <tr><td>store_id</td><td>uuid FK</td><td>Ссылка на stores.id — общий ключ B2B↔B2C</td></tr>
+      <tr><td>pos_item_id</td><td>text</td><td>Оригинальный ID из POS-системы магазина</td></tr>
+      <tr><td>raw_name</td><td>text</td><td>Исходное название из кассы (иврит/смешанный)</td></tr>
+      <tr><td>name_he / name_ru / name_en</td><td>text</td><td>Нормализованные названия на 3 языках (GPT-4o-mini)</td></tr>
+      <tr><td>category</td><td>text</td><td>dairy | bakery | produce | meat | fish | beverages | snacks | frozen | ...</td></tr>
+      <tr><td>price / quantity / unit / barcode</td><td>numeric/text</td><td>Текущие данные из POS</td></tr>
+      <tr><td>embedding</td><td>vector(1536)</td><td>text-embedding-3-small — основа для семантического поиска</td></tr>
+      <tr><td>sync_hash</td><td>text</td><td>sha256 payload — позволяет пропускать неизменённые товары при инжесте</td></tr>
+      <tr><td>is_available</td><td>bool</td><td>Наличие товара в магазине</td></tr>
+      <tr><td>last_synced_at</td><td>timestamptz</td><td>Время последней синхронизации из POS</td></tr>
+    </tbody>
+  </table>
+
+  <div class="info-box">
+    <strong>Для B2B-интеграции:</strong> поле <code>previousPrice</code> зарезервировано в типе <code>SearchResultWithStore</code>, но логика заполнения из <code>price_history</code> не реализована. Это прямая точка для подключения B2B-функциональности "история цен".
+  </div>
+
+  <!-- ─── 3. API ─── -->
+  <div class="section-header">
+    <div class="section-number">3</div>
+    <h2>API Endpoints</h2>
+  </div>
+
+  <h3>GET /api/search — поиск товаров</h3>
+  <table>
+    <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>q</td><td>string *</td><td>Поисковый запрос (мин. 2 символа, макс. 300)</td></tr>
+      <tr><td>store</td><td>uuid</td><td>Фильтр по конкретному магазину</td></tr>
+      <tr><td>limit</td><td>number</td><td>Макс. результатов (default 10, max 50)</td></tr>
+      <tr><td>user_lat / user_lng</td><td>float</td><td>Координаты пользователя для геопоиска</td></tr>
+      <tr><td>strategy</td><td>near | cheap</td><td>Стратегия сортировки (default: cheap)</td></tr>
+      <tr><td>max_distance_km</td><td>float</td><td>Радиус для near-стратегии (default: 1.5 км)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Пайплайн Single-item запроса</h3>
+  <div class="pipeline">
+    <div class="pipeline-step">guardRequest</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step llm">intentCheck (LangChain)</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step cached">Redis cache?</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step llm">getQueryEmbedding</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step db">match_products RPC</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step db">fetchStoreMap</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step llm">generateSearchAnswer</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step cached">Redis write*</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step out">JSON response</div>
+  </div>
+
+  <h3>Пайплайн Basket запроса (запятые / союзы)</h3>
+  <div class="pipeline">
+    <div class="pipeline-step">guardRequest</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step llm">intentCheck</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step cached">Redis cache?</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step db">parallel runItemSearch × N</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">buildBasketResult (dedup)</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step llm">generateBasketAnswer</div><div class="pipeline-arrow">→</div>
+    <div class="pipeline-step out">JSON response</div>
+  </div>
+  <p style="font-size:11px; color: var(--zinc-500); margin-top:-12px; margin-bottom:16px;">* fire-and-forget — не блокирует ответ</p>
+
+  <h3>Тип ответа SearchResponse</h3>
+  <pre><code><span class="kw">interface</span> <span class="type">SearchResponse</span> {
+  answer:  <span class="type">string</span>;                   <span class="cm">// LLM-ответ на языке запроса</span>
+  results: <span class="type">SearchResultWithStore</span>[];  <span class="cm">// список товаров</span>
+  basket?: <span class="type">BasketResult</span>;            <span class="cm">// только для basket-режима</span>
+}
+
+<span class="kw">interface</span> <span class="type">SearchResultWithStore</span> {
+  id: <span class="type">string</span>; storeId: <span class="type">string</span>; storeName: <span class="type">string</span>;
+  normalizedName: <span class="type">string</span>; nameHe: <span class="type">string</span>|<span class="kw">null</span>; nameRu: <span class="type">string</span>|<span class="kw">null</span>; nameEn: <span class="type">string</span>|<span class="kw">null</span>;
+  category: <span class="type">string</span>|<span class="kw">null</span>; price: <span class="type">number</span>|<span class="kw">null</span>; quantity: <span class="type">number</span>|<span class="kw">null</span>;
+  unit: <span class="type">string</span>|<span class="kw">null</span>; barcode: <span class="type">string</span>|<span class="kw">null</span>;
+  similarity: <span class="type">number</span>;           <span class="cm">// 0..1 косинусное сходство</span>
+  distanceKm?: <span class="type">number</span>;          <span class="cm">// если переданы координаты</span>
+  storeLat?: <span class="type">number</span>|<span class="kw">null</span>;       <span class="cm">// для Waze / Google Maps</span>
+  storeLng?: <span class="type">number</span>|<span class="kw">null</span>;
+  previousPrice?: <span class="type">number</span>|<span class="kw">null</span>;  <span class="cm">// зарезервировано под price_history</span>
+}
+
+<span class="kw">interface</span> <span class="type">BasketResult</span> {
+  items: <span class="type">string</span>[];                     <span class="cm">// пункты корзины</span>
+  storeOptions: <span class="type">BasketStoreOption</span>[];  <span class="cm">// до 5, отсортировано</span>
+  savings: <span class="type">number</span>;                    <span class="cm">// экономия (₪) между лучшим и худшим вариантом</span>
+  bestStoreId: <span class="type">string</span>|<span class="kw">null</span>;
+}</code></pre>
+
+  <h3>POST /api/ingest — приём данных из POS</h3>
+  <pre><code><span class="cm">// Body:</span>
+{
+  storeId:  <span class="str">"uuid"</span>,   <span class="cm">// UUID магазина — общий ключ B2B↔B2C</span>
+  provider: <span class="str">"morning"</span> | <span class="str">"green_invoice"</span> | <span class="str">"manual"</span> | <span class="str">"other"</span>,
+  products: [{ id, name, price, quantity?, unit?, barcode? }]  <span class="cm">// макс. 500</span>
+}
+
+<span class="cm">// Ответ:</span>
+{ success: <span class="kw">true</span>, store: { id, name }, processed: <span class="num">N</span>, upserted: <span class="num">N</span>, skipped: <span class="num">N</span> }</code></pre>
+
+  <div class="grid2" style="margin-top:8px;">
+    <div class="card">
+      <h4>Пайплайн ingest</h4>
+      <div style="font-size:11px; line-height:1.8;">
+        1. Validate (Zod schema)<br>
+        2. Verify store exists (Supabase)<br>
+        3. Compute sha256 per product<br>
+        4. Fetch existing hashes → filter changed<br>
+        5. normalizeProducts (GPT-4o-mini, batch 30)<br>
+        6. generateEmbeddingsBatch (batch)<br>
+        7. Upsert (ON CONFLICT store_id, pos_item_id)
+      </div>
+    </div>
+    <div class="card">
+      <h4>Умная инкрементальная синхронизация</h4>
+      <div style="font-size:11px; line-height:1.8; color: #166534;">
+        Если payload товара не изменился (sha256 совпадает) — LLM и embedding <strong>не вызываются</strong>. Только изменённые товары проходят через AI-пайплайн. Это критично для экономии OpenAI-кредитов при повторной загрузке прайса.
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── 4. Безопасность ─── -->
+  <div class="section-header">
+    <div class="section-number">4</div>
+    <h2>Безопасность (guardRequest)</h2>
+  </div>
+
+  <table>
+    <thead><tr><th>Уровень</th><th>Механизм</th><th>Параметры</th><th>При отказе</th></tr></thead>
+    <tbody>
+      <tr><td>Rate limit (burst)</td><td>@upstash/ratelimit SlidingWindow</td><td>10 req / 10 сек</td><td>429 + Retry-After</td></tr>
+      <tr><td>Rate limit (sustained)</td><td>@upstash/ratelimit SlidingWindow</td><td>200 req / 1 час</td><td>429 + Retry-After</td></tr>
+      <tr><td>Geo-block</td><td>ip-api.com → countryCode</td><td>Только IL</td><td>403</td></tr>
+      <tr><td>VPN / proxy</td><td>ip-api.com → proxy, hosting flags</td><td>Любой proxy/datacenter</td><td>403</td></tr>
+    </tbody>
+  </table>
+  <div class="info-box"><strong>Fail-open политика:</strong> если Redis или ip-api.com недоступны — запрос разрешается. Приоритет доступности над блокировкой. IP-кэш в Redis: TTL 24ч (ключ <code>ipinfo:&lt;ip&gt;</code>).</div>
+
+  <!-- ─── 5. Intent check ─── -->
+  <div class="section-header">
+    <div class="section-number">5</div>
+    <h2>Семантический фильтр намерений (intentCheck)</h2>
+  </div>
+
+  <p style="margin-bottom:10px;">LangChain-цепочка перед каждым поиском проверяет, что запрос — это реальный поиск товара, а не разговорная фраза или мусор:</p>
+  <pre><code><span class="type">PromptTemplate</span>  →  <span class="type">ChatOpenAI</span>(<span class="str">'gpt-4o-mini'</span>, temperature=<span class="num">0</span>)  →  <span class="type">StringOutputParser</span>
+<span class="cm">// возвращает 'YES' или 'NO'</span></code></pre>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Redis кэш</h4>
+      Ключ: <code>intent:&lt;sha256(query)&gt;</code><br>
+      TTL: 24 часа<br>
+      Значение: <code>'YES'</code> / <code>'NO'</code><br><br>
+      <em style="font-size:11px;">Одинаковый запрос → OpenAI вызывается только 1 раз в сутки</em>
+    </div>
+    <div class="card">
+      <h4>Langfuse трассировка</h4>
+      userId = IP клиента<br>
+      metadata = { query, route }<br>
+      Flush — fire-and-forget<br><br>
+      <em style="font-size:11px;">Не блокирует ответ API</em>
+    </div>
+  </div>
+
+  <!-- ─── 6. Redis кэши ─── -->
+  <div class="section-header">
+    <div class="section-number">6</div>
+    <h2>Redis кэши (Upstash)</h2>
+  </div>
+
+  <table>
+    <thead><tr><th>Ключ</th><th>TTL</th><th>Содержимое</th></tr></thead>
+    <tbody>
+      <tr><td><code>search:cache:&lt;sha256(q)&gt;</code></td><td>24 ч</td><td>CachedSearchPayload (single-item)</td></tr>
+      <tr><td><code>search:cache:basket:&lt;sha256(sorted)&gt;</code></td><td>24 ч</td><td>CachedSearchPayload (basket)</td></tr>
+      <tr><td><code>embed:&lt;sha256(q)&gt;</code></td><td>7 дней</td><td>number[] — 1536-dim вектор</td></tr>
+      <tr><td><code>store:&lt;uuid&gt;</code></td><td>1 ч</td><td>{ name, lat, lng } метаданные магазина</td></tr>
+      <tr><td><code>intent:&lt;sha256(q)&gt;</code></td><td>24 ч</td><td>'YES' / 'NO'</td></tr>
+      <tr><td><code>ipinfo:&lt;ip&gt;</code></td><td>24 ч</td><td>IpApiResponse (geo + proxy)</td></tr>
+      <tr><td><code>rl:burst:&lt;ip&gt;</code></td><td>rolling</td><td>Rate limit counter (burst)</td></tr>
+      <tr><td><code>rl:sustained:&lt;ip&gt;</code></td><td>rolling</td><td>Rate limit counter (sustained)</td></tr>
+    </tbody>
+  </table>
+  <div class="warn-box"><strong>Near Me результаты не кэшируются</strong> — они зависят от координат конкретного пользователя и изменились бы при следующем запросе.</div>
+
+  <!-- ─── 7. Клиентская часть ─── -->
+  <div class="section-header">
+    <div class="section-number">7</div>
+    <h2>Клиентская часть</h2>
+  </div>
+
+  <h3>State Management</h3>
+  <div class="grid2">
+    <div class="card">
+      <h4>Redux Toolkit — корзина</h4>
+      <pre><code><span class="type">BasketState</span> {
+  items:    <span class="type">BasketItem</span>[]
+  strategy: <span class="str">'near'</span> | <span class="str">'cheap'</span>
+  hydrated: <span class="type">boolean</span>
+}</code></pre>
+      Actions: <code>addItem</code>, <code>removeItem</code>, <code>clearBasket</code>, <code>setStrategy</code>, <code>hydrateBasket</code><br>
+      <em style="font-size:11px;">Персистенция в localStorage</em>
+    </div>
+    <div class="card">
+      <h4>TanStack Query — поиск</h4>
+      <pre><code>queryKey: [
+  <span class="str">'search'</span>,
+  committedQuery,
+  userLocation,
+  strategy
+]</code></pre>
+      AbortSignal — отменяет устаревшие запросы<br>
+      <em style="font-size:11px;">enabled только при query ≥ 2 символа</em>
+    </div>
+  </div>
+
+  <h3>Компоненты</h3>
+  <table>
+    <thead><tr><th>Компонент</th><th>Функция</th></tr></thead>
+    <tbody>
+      <tr><td>SearchBox</td><td>textarea + голосовой ввод (Web Speech API) + геолокация + переключатель near/cheap стратегии + suggestion chips</td></tr>
+      <tr><td>ListInput</td><td>chip-based UI для списка товаров. Автоактивация при вводе запятой/новой строки с ≥2 элементами</td></tr>
+      <tr><td>SearchResults</td><td>Оркестратор: AnswerCard + список ProductCard + BasketSummaryCard</td></tr>
+      <tr><td>ProductCard</td><td>Карточка товара: цена, магазин, кнопки добавить/удалить, Waze / Google Maps deep-links, sharing в WhatsApp</td></tr>
+      <tr><td>BasketFloatingBar</td><td>Плавающий бар: сумма корзины, список товаров, навигация к магазину, шаринг в WhatsApp</td></tr>
+      <tr><td>AnswerCard</td><td>LLM-ответ с кнопкой шаринга в WhatsApp</td></tr>
+      <tr><td>BasketSummaryCard</td><td>Сравнение магазинов в basket-режиме: таблица цен, экономия, лучший вариант</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Голосовой ввод</h3>
+  <p>Web Speech API (<code>SpeechRecognition</code>). Поддерживаемые языки: <code>he-IL</code>, <code>ru-RU</code>, <code>en-US</code>. Переключение кнопкой в UI. В list-режиме голос отключён.</p>
+
+  <h3>Геопоиск</h3>
+  <table>
+    <thead><tr><th>Стратегия</th><th>Поведение</th></tr></thead>
+    <tbody>
+      <tr><td><strong>near</strong></td><td>Запрашивает 3× больше результатов → фильтрует по haversine-радиусу (default 1.5 км) → сортирует по расстоянию ASC. Не кэшируется.</td></tr>
+      <tr><td><strong>cheap</strong></td><td>Стандартный семантический рейтинг (cosine similarity). Кэшируется в Redis 24ч.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── 8. Валидация ─── -->
+  <div class="section-header">
+    <div class="section-number">8</div>
+    <h2>Клиентская валидация запроса (validateQuery)</h2>
+  </div>
+
+  <p style="margin-bottom:10px;">Цепочка правил выполняется перед отправкой в API:</p>
+  <table>
+    <thead><tr><th>Правило</th><th>Условие</th></tr></thead>
+    <tbody>
+      <tr><td>ruleMinLength</td><td>≥ 2 символа</td></tr>
+      <tr><td>ruleMaxLength</td><td>≤ 300 символов</td></tr>
+      <tr><td>ruleHasLetter</td><td>Хотя бы одна буква (Unicode: латиница/иврит/кириллица/арабский)</td></tr>
+      <tr><td>ruleNoUrl</td><td>Нет https:// или www.</td></tr>
+      <tr><td>ruleNoCode</td><td>Нет SQL-инъекций, script-тегов, template literals</td></tr>
+      <tr><td>ruleMaxItems</td><td>Макс. 10 пунктов в basket-запросе</td></tr>
+      <tr><td>ruleItemsLookLikeProducts</td><td>Каждый пункт: есть буква, длина ≤ 80</td></tr>
+      <tr><td>ruleNoKeyboardSpam</td><td>Нет повторяющихся символов, нет qwerty-пробегов</td></tr>
+      <tr><td>ruleNotConversational</td><td>Паттерны приветствий/вопросов на иврите, русском, английском</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ─── 9. AI слой ─── -->
+  <div class="section-header">
+    <div class="section-number">9</div>
+    <h2>AI / LLM слой (openai.ts)</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Модели</h4>
+      <code>gpt-4o-mini</code> — нормализация + генерация ответов<br><br>
+      <code>text-embedding-3-small</code> (1536 dim) — семантические эмбеддинги
+    </div>
+    <div class="card">
+      <h4>Батчинг</h4>
+      Нормализация: batch 30 товаров / вызов<br><br>
+      Эмбеддинги: весь массив за 1 вызов API (до 2048 входов)
+    </div>
+  </div>
+
+  <h3>Нормализация (normalizeProducts)</h3>
+  <p>GPT-4o-mini генерирует JSON с полями: <code>nameHe</code>, <code>nameRu</code>, <code>nameEn</code>, <code>category</code>, <code>unit</code>. Эмбеддинг строится из конкатенации всех трёх языков — запросы на иврите, русском и английском попадают в один вектор.</p>
+
+  <h3>Персона AI-ответа ("Аchi Sababa")</h3>
+  <p>Все ответы поиска генерируются через единый PERSONA_PROMPT — "אחי הסבבה" (Savvy Israeli Neighbor): тёплый тон, израильский слэнг, язык ответа = язык запроса. Включает правило дефицита: если quantity &gt; 0 и &lt; 5 → обязательное предупреждение.</p>
+
+  <!-- ─── 10. i18n ─── -->
+  <div class="section-header">
+    <div class="section-number">10</div>
+    <h2>Интернационализация (next-intl)</h2>
+  </div>
+
+  <table>
+    <thead><tr><th>Локаль</th><th>Направление</th><th>Файл</th><th>Голос STT</th></tr></thead>
+    <tbody>
+      <tr><td>he (иврит)</td><td>RTL</td><td>messages/he.json</td><td>he-IL</td></tr>
+      <tr><td>ru (русский)</td><td>LTR</td><td>messages/ru.json</td><td>ru-RU</td></tr>
+      <tr><td>en (английский)</td><td>LTR</td><td>messages/en.json</td><td>en-US</td></tr>
+    </tbody>
+  </table>
+  <p>Определение локали — по браузеру через next-intl. Переключатель в хедере. Все строки UI переведены включая WhatsApp-шаблоны шаринга.</p>
+
+  <!-- ─── 11. Статус Фазы 3 ─── -->
+  <div class="section-header">
+    <div class="section-number">11</div>
+    <h2>Статус реализации — Фаза 3: B2C Bridge</h2>
+  </div>
+
+  <table>
+    <thead><tr><th>Шаг из B2B-плана</th><th>Статус</th><th>Детали</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>B2C API для клиентского приложения</td>
+        <td class="status-done">✓ Готово</td>
+        <td>GET /api/search — полный пайплайн с Redis кэшем</td>
+      </tr>
+      <tr>
+        <td>Redis кэширование поиска</td>
+        <td class="status-done">✓ Готово</td>
+        <td>search:cache:* TTL 24h, basket отдельно</td>
+      </tr>
+      <tr>
+        <td>Геопоиск в радиусе 1-3 км</td>
+        <td class="status-done">✓ Готово</td>
+        <td>haversine + near-стратегия, default 1.5 км, max_distance_km param</td>
+      </tr>
+      <tr>
+        <td>Семантический поиск (pgvector)</td>
+        <td class="status-done">✓ Готово</td>
+        <td>match_products RPC, threshold 0.25, cosine similarity</td>
+      </tr>
+      <tr>
+        <td>Координаты магазинов для навигации</td>
+        <td class="status-done">✓ Готово</td>
+        <td>storeLat/storeLng в ответе → Waze + Google Maps deep-links</td>
+      </tr>
+      <tr>
+        <td>Supabase Realtime (WebSockets)</td>
+        <td class="status-miss">✗ Не реализовано</td>
+        <td>Нужна подписка на канал изменений таблицы products</td>
+      </tr>
+      <tr>
+        <td>Обновление цен в корзине в реальном времени</td>
+        <td class="status-miss">✗ Не реализовано</td>
+        <td>Зависит от Supabase Realtime</td>
+      </tr>
+      <tr>
+        <td>История цен (price_history)</td>
+        <td class="status-miss">✗ Не реализовано</td>
+        <td>Поле previousPrice зарезервировано в типе SearchResultWithStore</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ─── 12. Точки интеграции ─── -->
+  <div class="section-header">
+    <div class="section-number">12</div>
+    <h2>Ключевые точки интеграции B2B → B2C</h2>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h4>Общий ключ: storeId (UUID)</h4>
+      B2B знает storeId магазина. B2C использует тот же UUID как <code>store_id</code> во всех таблицах. Запрос <code>GET /api/search?store=&lt;uuid&gt;</code> фильтрует результаты по конкретному магазину.
+    </div>
+    <div class="card">
+      <h4>Точка обновления цен в реальном времени</h4>
+      B2B нажимает "Обновить цену" → <code>POST /api/ingest</code> → upsert в products. При добавлении Supabase Realtime B2C-клиент получит обновление без перезагрузки. Redis-кэш нужно инвалидировать при изменении цены.
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h4>Что нужно добавить для полной реализации Фазы 3</h4>
+    <ol style="font-size:12px; line-height:2; padding-left:18px; margin-top:8px;">
+      <li>Supabase Realtime подписка на <code>products</code> table в клиенте → обновление BasketState при изменении цены</li>
+      <li>Инвалидация Redis <code>search:cache:*</code> при <code>POST /api/ingest</code> (по store_id)</li>
+      <li>Таблица <code>price_history</code> в Supabase + заполнение <code>previousPrice</code> в SearchResultWithStore</li>
+      <li>QR-код на PDF-ценниках (B2B) ведёт на <code>/api/search?store=&lt;uuid&gt;&q=&lt;product&gt;</code></li>
+    </ol>
+  </div>
+
+  <br><br>
+  <hr style="border: none; border-top: 1px solid var(--zinc-200); margin: 32px 0 16px;" />
+  <p style="font-size:11px; color: var(--zinc-500); text-align:center;">
+    Nearbit B2C — Техническое описание · 24 марта 2026 · Подготовлено для интеграции с B2B-планом (Фаза 3)
+  </p>
+
+</div>
+</body>
+</html>
