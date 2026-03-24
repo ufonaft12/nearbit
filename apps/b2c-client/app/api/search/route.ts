@@ -383,24 +383,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // ── Semantic intent check (LangChain + Redis cache) ───────────────────────
-  // Runs after regex validation (validateQuery, client-side) and guard to
-  // avoid wasting OpenAI credits on rate-limited or geo-blocked requests.
-  // Client IP is forwarded to Langfuse as userId for per-user trace grouping.
   const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     ?? req.headers.get('x-real-ip')
     ?? 'unknown';
-  const isProductQuery = await checkProductIntent(query, clientIp);
-  if (!isProductQuery) {
-    return NextResponse.json(
-      { error: 'That doesn\'t look like a product search. Try "חלב", "eggs", or "молоко".' },
-      { status: 400 },
-    );
-  }
 
-  const isNear = strategy === 'near';
-
-  // ── Basket detection ──────────────────────────────────────────────────────
+  const isNear      = strategy === 'near';
   const basketItems = parseBasketItems(query);
   const isBasket    = basketItems !== null;
 
@@ -416,7 +403,8 @@ export async function GET(req: NextRequest) {
         .digest('hex')}${storeSegment}`
     : `search:cache:${createHash('sha256').update(query.toLowerCase()).digest('hex')}${storeSegment}`;
 
-  // ── 0. Redis cache check (skipped for Near Me — results are location-dependent) ──
+  // ── 0. Redis cache check BEFORE intent check — cache hits skip LLM entirely
+  //    (skipped for Near Me — results are location-dependent)
   if (redis && !isNear) {
     try {
       const cached = await redis.get<CachedSearchPayload>(cacheKey);
@@ -442,15 +430,27 @@ export async function GET(req: NextRequest) {
     const basePerItem  = Math.max(3, Math.ceil(limit / basketItems!.length) + 2);
     const perItemLimit = isNear ? Math.min(basePerItem * 3, 30) : basePerItem;
 
+    // Parallel: intent check + all per-item searches run simultaneously.
+    // This saves ~1-2 s by overlapping the LLM call with vector searches.
+    let isProductQuery: boolean;
     let itemResults: ItemSearchResult[];
     try {
-      // Parallel: embed + search for every basket item simultaneously
-      itemResults = await Promise.all(
-        basketItems!.map((item) => runItemSearch(item, perItemLimit)),
-      );
+      const parallel = await Promise.all([
+        checkProductIntent(query, clientIp),
+        Promise.all(basketItems!.map((item) => runItemSearch(item, perItemLimit))),
+      ]);
+      isProductQuery = parallel[0];
+      itemResults    = parallel[1];
     } catch (err) {
-      console.error('[search] basket item search error', err);
+      console.error('[search] basket search error', err);
       return NextResponse.json({ error: 'Basket search failed' }, { status: 502 });
+    }
+
+    if (!isProductQuery) {
+      return NextResponse.json(
+        { error: 'That doesn\'t look like a product search. Try "חלב", "eggs", or "молוко".' },
+        { status: 400 },
+      );
     }
 
     // For Near Me, filter each item's products to nearby stores before aggregating
@@ -517,13 +517,26 @@ export async function GET(req: NextRequest) {
   // ── SINGLE-ITEM PIPELINE ─────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
 
-  // 1. Embed
+  // 1. Parallel: intent check + embedding — saves ~1-2 s on every cache miss.
+  let isProductQuery: boolean;
   let queryEmbedding: number[];
   try {
-    queryEmbedding = await getQueryEmbedding(query);
+    const parallel = await Promise.all([
+      checkProductIntent(query, clientIp),
+      getQueryEmbedding(query),
+    ]);
+    isProductQuery = parallel[0];
+    queryEmbedding = parallel[1];
   } catch (err) {
-    console.error('[search] embedding error', err);
-    return NextResponse.json({ error: 'Failed to embed query' }, { status: 502 });
+    console.error('[search] intent/embedding error', err);
+    return NextResponse.json({ error: 'Failed to process query' }, { status: 502 });
+  }
+
+  if (!isProductQuery) {
+    return NextResponse.json(
+      { error: 'That doesn\'t look like a product search. Try "חלב", "eggs", or "молоко".' },
+      { status: 400 },
+    );
   }
 
   // 2. Semantic search via RPC.
