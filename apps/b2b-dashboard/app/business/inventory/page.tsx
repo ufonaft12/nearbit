@@ -1,32 +1,23 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getStore } from "@/lib/supabase/queries";
 import ProductsTable from "@/components/inventory/ProductsTable";
-import { getMarketComparisons } from "@/lib/actions/market";
 import { Upload } from "lucide-react";
 
+// Columns actually used in the UI — excludes embedding (1536 floats) and raw POS fields
+const PRODUCT_COLUMNS =
+  "id, store_id, name_he, name_ru, name_en, normalized_name, category, category_id, price, sale_price, sale_until, barcode, unit, quantity, is_available, image_url, created_at";
 
 export default async function InventoryPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const store = await getStore();
 
-  const { data: store } = await supabase
-    .from("stores")
-    .select("id, city")
-    .eq("owner_id", user!.id)
-    .single();
-
-  const [products, marketData] = await Promise.all([
-    supabase
-      .from("products")
-      .select("*")
-      .eq("store_id", store?.id ?? "")
-      .order("name_he")
-      .then((r) => r.data ?? []),
-    // Pass the store's city so the RPC filters by nearby competitors
-    getMarketComparisons(store?.city ?? undefined),
-  ]);
+  const products = await supabase
+    .from("products")
+    .select(PRODUCT_COLUMNS)
+    .eq("store_id", store?.id ?? "")
+    .order("name_he")
+    .then((r) => r.data ?? []);
 
   return (
     <div className="space-y-6">
@@ -46,10 +37,7 @@ export default async function InventoryPage() {
         </Link>
       </div>
 
-      <ProductsTable
-        products={products}
-        marketData={marketData}
-      />
+      <ProductsTable products={products} />
     </div>
   );
 }

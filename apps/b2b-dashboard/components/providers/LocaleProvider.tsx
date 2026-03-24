@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useOptimistic, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { Locale } from "@/i18n/locale";
 import { getDir } from "@/i18n/locale";
 
@@ -31,6 +32,7 @@ export function LocaleProvider({
   children: React.ReactNode;
   initialLocale: Locale;
 }) {
+  const router = useRouter();
   const [, startTransition] = useTransition();
   const [locale, setOptimisticLocale] = useOptimistic<Locale>(initialLocale);
 
@@ -38,8 +40,8 @@ export function LocaleProvider({
     startTransition(async () => {
       setOptimisticLocale(next);
       await persistLocale(next);
-      // Full navigation reload so server components re-render with new locale
-      window.location.reload();
+      // Soft refresh — re-renders server components with new locale cookie, no asset reload
+      router.refresh();
     });
   };
 

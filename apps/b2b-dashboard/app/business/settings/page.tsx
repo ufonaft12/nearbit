@@ -1,17 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-
+import { getStore } from "@/lib/supabase/queries";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: store } = await supabase
-    .from("stores")
-    .select("*")
-    .eq("owner_id", user!.id)
-    .single();
+  const { data: { user } } = await supabase.auth.getUser();
+  const store = await getStore();
 
   return (
     <div className="max-w-2xl space-y-6">
