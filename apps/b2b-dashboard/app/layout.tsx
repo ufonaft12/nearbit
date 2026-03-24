@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
+import { getLocale } from "next-intl/server";
 import { getDir } from "@/i18n/locale";
 import type { Locale } from "@/i18n/locale";
 import { LocaleProvider } from "@/components/providers/LocaleProvider";
@@ -17,17 +16,21 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const locale = (await getLocale()) as Locale;
-  const messages = await getMessages();
   const dir = getDir(locale);
+
+  // Load all locales once — passed to LocaleProvider so switching is instant (no server round-trip)
+  const [en, he, ru] = await Promise.all([
+    import("../messages/en.json").then((m) => m.default),
+    import("../messages/he.json").then((m) => m.default),
+    import("../messages/ru.json").then((m) => m.default),
+  ]);
 
   return (
     <html lang={locale} dir={dir}>
       <body>
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <LocaleProvider initialLocale={locale}>
-            {children}
-          </LocaleProvider>
-        </NextIntlClientProvider>
+        <LocaleProvider initialLocale={locale} allMessages={{ en, he, ru }}>
+          {children}
+        </LocaleProvider>
       </body>
     </html>
   );
