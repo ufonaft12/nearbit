@@ -31,9 +31,11 @@ interface Props {
   items:         string[];
   onItemsChange: (items: string[]) => void;
   onBack:        () => void;
+  /** Auto-focus the add-input on mount (preserves keyboard on mobile) */
+  autoFocus?:    boolean;
 }
 
-export const ListInput = memo(function ListInput({ items, onItemsChange, onBack }: Props) {
+export const ListInput = memo(function ListInput({ items, onItemsChange, onBack, autoFocus }: Props) {
   const t = useTranslations('search');
 
   const [addValue, setAddValue] = useState('');
@@ -132,6 +134,7 @@ export const ListInput = memo(function ListInput({ items, onItemsChange, onBack 
           placeholder={t('addItemPlaceholder')}
           aria-label={t('addItemAriaLabel')}
           autoComplete="off"
+          autoFocus={autoFocus}
           dir="auto"
           className="flex-1 bg-transparent text-sm text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none"
         />

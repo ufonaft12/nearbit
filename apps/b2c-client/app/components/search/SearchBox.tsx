@@ -151,39 +151,38 @@ export function SearchBox({
     debouncedCommit.cancel();
   }, [inputValue, debouncedCommit]);
 
+  // ── Focus management on mode switch ─────────────────────────────────────────
+  // Re-focus the textarea whenever we return to text mode so the mobile keyboard
+  // does not close and the user can keep typing without an extra tap.
+  useEffect(() => {
+    if (inputMode === 'text') {
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+  }, [inputMode]);
+
   // ── Input change handler ─────────────────────────────────────────────────────
+  // No auto-switching: mode changes are strictly manual via the toggle button.
   const handleInputChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
-      const value = e.target.value.slice(0, MAX_QUERY_LENGTH);
-      setInputValue(value);
+      setInputValue(e.target.value.slice(0, MAX_QUERY_LENGTH));
       setValidationError(null);
-
-      // Auto-transform to list mode on comma / newline with ≥2 segments
-      if (value.includes(',') || value.includes('\n')) {
-        const segments = value
-          .split(/[,،\n]/)
-          .map((s) => s.trim())
-          .filter((s) => s.length >= 2);
-        if (segments.length >= 2) {
-          setListItems(segments);
-          setInputMode('list');
-          debouncedCommit.cancel();
-          commit('');
-          return;
-        }
-      }
-
     },
-    [commit],
+    [],
   );
 
   // ── Execute search (on Submit / Enter) ───────────────────────────────────────
   const executeSearch = useCallback(() => {
     debouncedCommit.cancel();
 
+    // Smart parse: in text mode split on commas and newlines so that
+    // "хумус, молоко" is sent as two separate basket intents rather than one.
     const trimmed = inputMode === 'list'
       ? listItems.filter((s) => s.trim().length >= MIN_QUERY_LENGTH).join(', ')
-      : inputValue.split('\n').map((l) => l.trim()).filter(Boolean).join(', ');
+      : inputValue
+          .split(/[,،\n]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(', ');
 
     if (trimmed.length < MIN_QUERY_LENGTH) return;
 
@@ -222,9 +221,20 @@ export function SearchBox({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); executeSearch(); }
+      if (e.key !== 'Enter') return;
+      const withMeta = e.ctrlKey || e.metaKey;
+      if (withMeta) {
+        // Ctrl+Enter / Cmd+Enter: always search, regardless of mode
+        e.preventDefault();
+        executeSearch();
+      } else if (inputMode === 'text') {
+        // Plain Enter in text mode: search (standard mobile "Go" / "Search" behavior)
+        e.preventDefault();
+        executeSearch();
+      }
+      // Plain Enter in list mode: allow default — inserts a new line
     },
-    [executeSearch],
+    [executeSearch, inputMode],
   );
 
   // ── Voice input ──────────────────────────────────────────────────────────────
@@ -315,6 +325,7 @@ export function SearchBox({
               items={listItems}
               onItemsChange={handleListItemsChange}
               onBack={handleBackToText}
+              autoFocus
             />
           ) : (
             <textarea
@@ -329,21 +340,24 @@ export function SearchBox({
               rows={1}
               maxLength={MAX_QUERY_LENGTH}
               aria-label={tSearch('ariaLabel')}
+              inputMode="search"
+              enterKeyHint="search"
               className="w-full resize-none overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-4 py-3 pb-9 text-base text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 dark:focus:ring-blue-400/50 shadow-sm transition-shadow"
-              style={{ minHeight: '48px' }}
+              style={{ minHeight: '56px' }}
             />
           )}
 
-          {/* List mode toggle — text mode only */}
+          {/* List mode toggle — text mode only.
+              min-h/w-[44px] ensures ≥44×44 px touch target on mobile. */}
           {inputMode === 'text' && (
             <button
               type="button"
               onClick={handleSwitchToList}
               title={tSearch('listMode')}
               aria-label={tSearch('listMode')}
-              className="absolute bottom-2 left-2 flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors"
+              className="absolute bottom-1 left-1 flex items-center gap-1 min-h-[44px] min-w-[44px] rounded-lg px-3 py-2 text-[10px] font-semibold text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors"
             >
-              <ListChecks size={12} />
+              <ListChecks size={13} />
               {tSearch('listMode')}
             </button>
           )}
