@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { parseUploadedFile } from "@/lib/utils/excel-parser";
-import type { ParseResult } from "@/lib/utils/excel-parser";
+// parseUploadedFile runs client-side — not imported here
 import { withTrace } from "@/lib/langfuse/client";
 import type { ProductUploadRow } from "@/types/database";
 
@@ -56,78 +55,60 @@ async function smartMapCategories(
 }
 
 // ---------------------------------------------------------------------------
-// Main Server Action
+// Types
 // ---------------------------------------------------------------------------
+
+// Payload sent from the client after client-side parsing
+export interface UploadPayload {
+  rows: ProductUploadRow[];
+  normalizedUnits: number;
+  encodingFixed: boolean;
+}
+
 export interface UploadResult {
   inserted: number;
   skipped: number;
   errors: string[];
-  normalizedUnits: number; // rows where unit was auto-mapped (e.g. "יח'" → "pcs")
-  encodingFixed: boolean;  // true when CSV was re-decoded from Windows-1255
+  normalizedUnits: number;
+  encodingFixed: boolean;
+  priceIncreased: number;  // existing products whose price went up
+  priceDecreased: number;  // existing products whose price went down
 }
 
+// ---------------------------------------------------------------------------
+// Main Server Action
+// Parsing is done client-side. This action receives pre-parsed rows.
+// ---------------------------------------------------------------------------
 export async function uploadInventoryAction(
-  formData: FormData
+  payload: UploadPayload
 ): Promise<UploadResult> {
-  const file = formData.get("file") as File | null;
-  const EMPTY: UploadResult = { inserted: 0, skipped: 0, errors: [], normalizedUnits: 0, encodingFixed: false };
+  const base = {
+    normalizedUnits: payload.normalizedUnits,
+    encodingFixed: payload.encodingFixed,
+    priceIncreased: 0,
+    priceDecreased: 0,
+  };
 
-  if (!file || file.size === 0) {
-    return { ...EMPTY, errors: ["No file provided."] };
-  }
-
-  const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-  if (file.size > MAX_SIZE) {
-    return { ...EMPTY, errors: ["File exceeds 10 MB limit."] };
-  }
-
-  const ALLOWED_TYPES = [
-    "text/csv",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.ms-excel",
-  ];
-  const nameOk = /\.(csv|xlsx|xls)$/i.test(file.name);
-  if (!ALLOWED_TYPES.includes(file.type) && !nameOk) {
-    return { ...EMPTY, errors: ["Only CSV and Excel files are allowed."] };
+  if (!payload.rows.length) {
+    return { inserted: 0, skipped: 0, errors: ["No rows to import."], ...base };
   }
 
   return withTrace(
     "inventory-upload",
     async (trace) => {
       trace.update({
-        input: { fileName: file.name, fileSize: file.size },
-        metadata: { source: "b2b_csv" },
+        input: { rowCount: payload.rows.length },
+        metadata: { source: "b2b_csv", normalizedUnits: payload.normalizedUnits },
       });
 
-      // 1. Parse file
-      const parseSpan = trace.span({ name: "parse-file" });
-      let parsed: ParseResult;
-      try {
-        parsed = await parseUploadedFile(file);
-        parseSpan.end({ output: { rowCount: parsed.rows.length, normalizedUnits: parsed.normalizedUnits, encodingFixed: parsed.encodingFixed } });
-      } catch (err) {
-        parseSpan.end({ output: { error: String(err) } });
-        return { ...EMPTY, errors: [`File parse error: ${String(err)}`] };
-      }
-
-      const { rows, normalizedUnits, encodingFixed } = parsed;
-
-      if (rows.length === 0) {
-        return { ...EMPTY, errors: ["File contained no valid rows."] };
-      }
-
-      // 2. Smart category mapping (LangChain placeholder)
+      // 1. Smart category mapping (LangChain placeholder)
       const mappingSpan = trace.span({ name: "smart-mapping" });
-      const mappedRows = await smartMapCategories(rows, trace);
+      const mappedRows = await smartMapCategories(payload.rows, trace);
       mappingSpan.end({ output: { rowCount: mappedRows.length } });
 
-      // 3. Write to Supabase
-      const dbSpan = trace.span({ name: "db-upsert" });
+      // 2. Authenticate + load store
       const supabase = await createClient();
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Unauthorized");
 
       const { data: store } = await supabase
@@ -137,7 +118,7 @@ export async function uploadInventoryAction(
         .single();
       if (!store) throw new Error("No store found for this user.");
 
-      // Resolve category text → category_id
+      // 3. Resolve category text → category_id
       const { data: categories } = await supabase
         .from("categories")
         .select("id, name_en");
@@ -145,35 +126,55 @@ export async function uploadInventoryAction(
         (categories ?? []).map((c) => [c.name_en.toLowerCase(), c.id])
       );
 
+      // 4. Price analytics — single SELECT for ALL pos_item_ids before the upsert.
+      //    Avoids N+1: one round-trip regardless of file size.
+      //    Chunked at 500 to stay within URL length limits for Hebrew slugs.
+      const incomingPrices = new Map<string, number>();
+      for (const row of mappedRows) {
+        incomingPrices.set(derivePosItemId(row), row.price);
+      }
+
+      const allIds = [...incomingPrices.keys()];
+      const oldPrices = new Map<string, number | null>();
+      const PRICE_CHUNK = 500;
+      for (let i = 0; i < allIds.length; i += PRICE_CHUNK) {
+        const { data: existing } = await supabase
+          .from("products")
+          .select("pos_item_id, price")
+          .eq("store_id", store.id)
+          .in("pos_item_id", allIds.slice(i, i + PRICE_CHUNK));
+        for (const r of existing ?? []) {
+          oldPrices.set(r.pos_item_id, r.price as number | null);
+        }
+      }
+
+      // 5. Batch upsert in chunks of 100
+      const dbSpan = trace.span({ name: "db-upsert" });
       const errors: string[] = [];
       let inserted = 0;
       let skipped = 0;
 
-      // Batch upsert in chunks of 100
       const CHUNK = 100;
       for (let i = 0; i < mappedRows.length; i += CHUNK) {
         const chunk = mappedRows.slice(i, i + CHUNK).map((row) => ({
-          store_id:     store.id,
-          pos_item_id:  derivePosItemId(row),   // required NOT NULL in B2C schema
-          raw_name:     row.name_he,             // required NOT NULL in B2C schema
-          name_he:      row.name_he,
-          name_ru:      row.name_ru ?? null,
-          name_en:      row.name_en ?? null,
-          barcode:      row.barcode ?? null,
-          category:     row.category ?? null,    // free-text (B2C column)
-          category_id:  row.category
+          store_id:    store.id,
+          pos_item_id: derivePosItemId(row),
+          raw_name:    row.name_he,
+          name_he:     row.name_he,
+          name_ru:     row.name_ru ?? null,
+          name_en:     row.name_en ?? null,
+          barcode:     row.barcode ?? null,
+          category:    row.category ?? null,
+          category_id: row.category
             ? (categoryIndex.get(row.category.toLowerCase()) ?? null)
             : null,
-          price:        row.price,
-          unit:         row.unit ?? "pcs",
+          price:       row.price,
+          unit:        row.unit ?? "pcs",
         }));
 
         const { error, count } = await supabase
           .from("products")
-          .upsert(chunk, {
-            onConflict: "store_id,pos_item_id",
-            count: "exact",
-          });
+          .upsert(chunk, { onConflict: "store_id,pos_item_id", count: "exact" });
 
         if (error) {
           errors.push(`Batch ${Math.floor(i / CHUNK) + 1}: ${error.message}`);
@@ -184,10 +185,24 @@ export async function uploadInventoryAction(
       }
 
       dbSpan.end({ output: { inserted, skipped, errors } });
+
+      // 6. Calculate price change analytics (compare after upsert)
+      let priceIncreased = 0;
+      let priceDecreased = 0;
+      for (const [posId, newPrice] of incomingPrices) {
+        const old = oldPrices.get(posId);
+        if (old !== undefined && old !== null) {
+          if (newPrice > old) priceIncreased++;
+          else if (newPrice < old) priceDecreased++;
+        }
+      }
+
       revalidatePath("/business/inventory");
 
-      return { inserted, skipped, errors, normalizedUnits, encodingFixed };
+      return { inserted, skipped, errors, ...base, priceIncreased, priceDecreased };
     },
-    { fileName: file.name }
-  ).catch((err): UploadResult => ({ ...EMPTY, errors: [String(err)] }));
+    { rowCount: payload.rows.length }
+  ).catch((err): UploadResult => ({
+    inserted: 0, skipped: 0, errors: [String(err)], ...base,
+  }));
 }

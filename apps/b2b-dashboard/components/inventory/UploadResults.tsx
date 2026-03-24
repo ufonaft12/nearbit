@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   Info,
   Wand2,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import type { UploadResult } from "@/lib/actions/inventory";
 
@@ -53,6 +55,7 @@ const VARIANT_STYLES: Record<AlertVariant, { border: string; bg: string; icon: R
 
 export default function UploadResults({ result, fileName, onReset }: UploadResultsProps) {
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
 
   const variant = getVariant(result);
   const styles = VARIANT_STYLES[variant];
@@ -107,6 +110,20 @@ export default function UploadResults({ result, fileName, onReset }: UploadResul
               label={result.errors.length === 1 ? "error" : "errors"}
               color="red"
             />
+          )}
+          {result.priceIncreased > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+              <TrendingUp size={11} />
+              <strong>{result.priceIncreased}</strong>{" "}
+              {result.priceIncreased === 1 ? "price" : "prices"} ↑
+            </span>
+          )}
+          {result.priceDecreased > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+              <TrendingDown size={11} />
+              <strong>{result.priceDecreased}</strong>{" "}
+              {result.priceDecreased === 1 ? "price" : "prices"} ↓
+            </span>
           )}
         </div>
       </div>
@@ -183,13 +200,13 @@ export default function UploadResults({ result, fileName, onReset }: UploadResul
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2 pt-1">
-        <Link
-          href="/business/inventory"
+        <button
+          onClick={() => router.push("/business/inventory")}
           className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
         >
           <ArrowLeft size={15} />
           Go to Inventory
-        </Link>
+        </button>
 
         {result.errors.length > 0 && (
           <button

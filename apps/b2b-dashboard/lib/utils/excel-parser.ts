@@ -56,25 +56,38 @@ function resolveColumn(
 
 export interface ParseResult {
   rows: ProductUploadRow[];
-  normalizedUnits: number; // rows where a Hebrew/Russian unit was mapped to a DB enum
-  encodingFixed: boolean;  // true when windows-1255 fallback was used for CSV
+  normalizedUnits: number;  // rows where a Hebrew/Russian unit was mapped to a DB enum
+  encodingFixed: boolean;   // true when windows-1255 fallback was used for CSV
+  parseErrors: string[];    // row-level validation errors (invalid/missing/negative price)
 }
 
 function mapRow(
   raw: Record<string, unknown>,
-  headers: string[]
-): { row: ProductUploadRow | null; unitNormalized: boolean } {
+  headers: string[],
+  rowNumber: number
+): { row: ProductUploadRow | null; unitNormalized: boolean; priceError: string | null } {
   const get = (field: keyof ProductUploadRow) => {
     const col = resolveColumn(headers, field);
     return col ? raw[col] : undefined;
   };
 
   const name_he = String(get("name_he") ?? "").trim();
-  if (!name_he) return { row: null, unitNormalized: false };
+  // Empty name → likely a trailing blank row; skip silently (no error reported)
+  if (!name_he) return { row: null, unitNormalized: false, priceError: null };
 
-  const rawPrice = get("price");
-  const price = parseFloat(String(rawPrice).replace(/[^\d.]/g, ""));
-  if (isNaN(price)) return { row: null, unitNormalized: false };
+  // Strict price validation — Israeli formatting: strip ₪ symbol and thousands commas
+  const rawPriceStr = String(get("price") ?? "").trim();
+  if (!rawPriceStr) {
+    return { row: null, unitNormalized: false, priceError: `Row ${rowNumber}: Price is required` };
+  }
+  const cleaned = rawPriceStr.replace(/[₪$€£¥,\s]/g, ""); // keep digits, dot, minus sign
+  const price = parseFloat(cleaned);
+  if (isNaN(price)) {
+    return { row: null, unitNormalized: false, priceError: `Row ${rowNumber}: Invalid price '${rawPriceStr}'` };
+  }
+  if (price < 0) {
+    return { row: null, unitNormalized: false, priceError: `Row ${rowNumber}: Price must be positive (got ${rawPriceStr})` };
+  }
 
   const rawUnit = String(get("unit") ?? "").trim() || undefined;
   // A unit was "normalized" only when the file had a non-empty, non-standard value
@@ -92,6 +105,7 @@ function mapRow(
       unit: normalizeUnit(rawUnit),
     },
     unitNormalized,
+    priceError: null,
   };
 }
 
@@ -111,25 +125,23 @@ export async function parseUploadedFile(file: File): Promise<ParseResult> {
       headers[col - 1] = String(cell.value ?? "");
     });
 
-    const rawRows: Record<string, unknown>[] = [];
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-      const obj: Record<string, unknown> = {};
-      row.eachCell((cell, col) => {
-        obj[headers[col - 1]] = cell.value;
-      });
-      rawRows.push(obj);
-    });
-
     let normalizedUnits = 0;
-    const rows = rawRows.flatMap((raw) => {
-      const { row, unitNormalized } = mapRow(raw, headers);
-      if (!row) return [];
-      if (unitNormalized) normalizedUnits++;
-      return [row];
+    const rows: ProductUploadRow[] = [];
+    const parseErrors: string[] = [];
+
+    worksheet.eachRow((excelRow, rowNumber) => {
+      if (rowNumber === 1) return; // skip header
+      const raw: Record<string, unknown> = {};
+      excelRow.eachCell((cell, col) => { raw[headers[col - 1]] = cell.value; });
+      const { row, unitNormalized, priceError } = mapRow(raw, headers, rowNumber);
+      if (priceError) parseErrors.push(priceError);
+      if (row) {
+        if (unitNormalized) normalizedUnits++;
+        rows.push(row);
+      }
     });
 
-    return { rows, normalizedUnits, encodingFixed: false };
+    return { rows, normalizedUnits, encodingFixed: false, parseErrors };
   }
 
   // CSV path — try UTF-8 first; if Hebrew chars are garbled, retry with Windows-1255
@@ -154,14 +166,20 @@ export async function parseUploadedFile(file: File): Promise<ParseResult> {
     skipEmptyLines: true,
   });
 
-  const headers = parsed.meta.fields ?? [];
+  const csvHeaders = parsed.meta.fields ?? [];
   let normalizedUnits = 0;
-  const rows = parsed.data.flatMap((raw) => {
-    const { row, unitNormalized } = mapRow(raw, headers);
-    if (!row) return [];
-    if (unitNormalized) normalizedUnits++;
-    return [row];
+  const rows: ProductUploadRow[] = [];
+  const parseErrors: string[] = [];
+
+  parsed.data.forEach((raw, index) => {
+    const rowNumber = index + 2; // +1 for 1-indexing, +1 because row 1 is the header
+    const { row, unitNormalized, priceError } = mapRow(raw, csvHeaders, rowNumber);
+    if (priceError) parseErrors.push(priceError);
+    if (row) {
+      if (unitNormalized) normalizedUnits++;
+      rows.push(row);
+    }
   });
 
-  return { rows, normalizedUnits, encodingFixed };
+  return { rows, normalizedUnits, encodingFixed, parseErrors };
 }
