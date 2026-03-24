@@ -1,0 +1,73 @@
+{
+  "nav": {
+    "dashboard": "Панель управления",
+    "inventory": "Инвентарь",
+    "priceTags": "Ценники",
+    "settings": "Настройки",
+    "signOut": "Выйти"
+  },
+  "inventory": {
+    "title": "Инвентарь",
+    "subtitle": "Управляйте каталогом товаров",
+    "uploadButton": "Загрузить инвентарь",
+    "searchPlaceholder": "Поиск по названию или штрихкоду…",
+    "generateTags": "Создать ценники ({count})",
+    "noProducts": "Товары не найдены.",
+    "showing": "Показано {filtered} из {total} товаров",
+    "priceAboveMarket": "Цена выше рынка на 10%+",
+    "columns": {
+      "productName": "Название товара",
+      "name": "Название",
+      "barcode": "Штрихкод",
+      "price": "Цена",
+      "marketComparison": "Сравнение с рынком",
+      "marketSubtitle": "↓ лучшая / разница",
+      "status": "Статус"
+    },
+    "status": {
+      "active": "Активен",
+      "inactive": "Неактивен"
+    },
+    "market": {
+      "best": "лучшая",
+      "competitors": "{count} конкурент",
+      "competitorsPlural": "{count} конкурентов",
+      "marketAverage": "Средняя по рынку",
+      "match": "Сравнять",
+      "matchTitle": "Установить цену: среднерыночная − ₪0.10 (₪{price})",
+      "aboveAvg": "+{pct}% ср.",
+      "belowAvg": "{pct}% ср.",
+      "sale": "Акция"
+    }
+  },
+  "dashboard": {
+    "title": "Панель управления",
+    "subtitle": "Обзор показателей магазина"
+  },
+  "priceTags": {
+    "title": "Ценники",
+    "subtitle": "Создавайте и печатайте ценники"
+  },
+  "settings": {
+    "title": "Настройки",
+    "subtitle": "Управляйте настройками магазина"
+  },
+  "auth": {
+    "signIn": "Войти",
+    "signUp": "Зарегистрироваться",
+    "email": "Эл. почта",
+    "password": "Пароль",
+    "forgotPassword": "Забыли пароль?",
+    "noAccount": "Нет аккаунта?",
+    "haveAccount": "Уже есть аккаунт?"
+  },
+  "common": {
+    "loading": "Загрузка…",
+    "error": "Что-то пошло не так",
+    "retry": "Повторить",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "edit": "Редактировать"
+  }
+}
