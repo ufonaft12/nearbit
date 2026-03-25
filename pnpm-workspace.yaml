@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  # services/ is excluded — market-parser is Python, managed by Poetry
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  core-js: true
+  sharp: true
+  supabase: true

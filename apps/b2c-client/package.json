@@ -1,5 +1,5 @@
 {
-  "name": "nearbit",
+  "name": "@nearbit/b2c-client",
   "version": "0.1.0",
   "private": true,
   "scripts": {

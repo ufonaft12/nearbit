@@ -1,0 +1,185 @@
+# =============================================================================
+# Nearbit Platform — Master Docker Compose Orchestrator
+# =============================================================================
+# Pipeline (runs every 6h via Ofelia):
+#   1. market-scraper  — downloads XML from supermarket servers → dumps/
+#   2. market-parser   — converts XML dumps → price CSVs in outputs/
+#   3. price-sync      — diffs CSVs vs Redis, upserts changes to Supabase
+#
+# Web services (always running):
+#   b2c-client         — Next.js consumer app  (localhost:3000)
+#   b2b-dashboard      — Next.js merchant app  (localhost:3001)
+# =============================================================================
+
+services:
+
+  # ── B2C Client (Next.js) ───────────────────────────────────────────────────
+  b2c-client:
+    build:
+      context: .                              # monorepo root
+      dockerfile: apps/b2c-client/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL:      ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_APP_URL:           ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    image: nearbit/b2c-client:latest
+    container_name: nearbit-b2c
+    restart: unless-stopped
+    ports:
+      - "${B2C_PORT:-3000}:3000"
+    env_file:
+      - .env.local
+    environment:
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      NODE_ENV: production
+    networks:
+      - nearbit-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── B2B Dashboard (Next.js) ────────────────────────────────────────────────
+  b2b-dashboard:
+    build:
+      context: .
+      dockerfile: apps/b2b-dashboard/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL:      ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_B2B_APP_URL:       ${NEXT_PUBLIC_B2B_APP_URL:-http://localhost:3001}
+    image: nearbit/b2b-dashboard:latest
+    container_name: nearbit-b2b
+    restart: unless-stopped
+    ports:
+      - "${B2B_PORT:-3001}:3001"
+    env_file:
+      - .env.local
+    environment:
+      SUPABASE_SERVICE_ROLE_KEY:  ${SUPABASE_SERVICE_ROLE_KEY}
+      MARKET_PARSER_INTERNAL_URL: http://market-parser:8000
+      NODE_ENV: production
+    networks:
+      - nearbit-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Market Scraper (Python) ────────────────────────────────────────────────
+  # Step 1 of pipeline: downloads XML files from supermarket servers → dumps/
+  # Runs once and exits. Scheduled by Ofelia every 6h.
+  # profile=pipeline → not started on `make up`, only created (Ofelia triggers it)
+  market-scraper:
+    image: erlichsefi/israeli-supermarket-scarpers:latest
+    container_name: nearbit-scraper
+    profiles: ["pipeline"]
+    restart: "no"
+    env_file:
+      - .env.local
+    environment:
+      ENABLED_SCRAPERS:   ${ENABLED_SCRAPERS:-BAREKET,YAYNO_BITAN_AND_CARREFOUR,SHUFERSAL}
+      ENABLED_FILE_TYPES: ${ENABLED_FILE_TYPES:-PRICE_FILE,STORE_FILE}
+      LIMIT:              ${SCRAPER_LIMIT:-1}
+      OUTPUT_MODE:        disk
+    volumes:
+      - parser-dumps:/usr/src/app/dumps
+    networks:
+      - nearbit-net
+
+  # ── Market Parser (Python) ─────────────────────────────────────────────────
+  # Step 2 of pipeline: reads XML from dumps/ → writes CSVs to outputs/
+  # Runs once and exits. Scheduled 20 min after scraper.
+  market-parser:
+    image: erlichsefi/israeli-supermarket-parsers:latest
+    container_name: nearbit-parser
+    profiles: ["pipeline"]
+    restart: "no"
+    env_file:
+      - .env.local
+    environment:
+      PARSER_LOG_LEVEL: ${PARSER_LOG_LEVEL:-INFO}
+      ENABLED_PARSERS:  ${ENABLED_PARSERS:-BAREKET,YAYNO_BITAN_AND_CARREFOUR,SHUFERSAL}
+      ENABLED_FILE_TYPES: ${ENABLED_FILE_TYPES:-PRICE_FILE,STORE_FILE}
+      LIMIT:            ${PARSER_LIMIT:-1}
+    volumes:
+      - ./services/market-parser/main.py:/usr/src/app/main.py
+      - parser-dumps:/usr/src/app/dumps
+      - parser-outputs:/usr/src/app/outputs
+    networks:
+      - nearbit-net
+
+  # ── Price Sync (Python) ───────────────────────────────────────────────────
+  # Step 3 of pipeline: diffs CSVs vs Redis state, upserts changes to Supabase.
+  # Runs once and exits. Scheduled 40 min after scraper.
+  price-sync:
+    build:
+      context: services/price-sync
+      dockerfile: Dockerfile
+    image: nearbit/price-sync:latest
+    container_name: nearbit-price-sync
+    profiles: ["pipeline"]
+    restart: "no"
+    mem_limit: 512m
+    cpus: 0.5
+    env_file:
+      - .env.local
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL:  ${NEXT_PUBLIC_SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      UPSTASH_REDIS_REST_URL:    ${UPSTASH_REDIS_REST_URL}
+      UPSTASH_REDIS_REST_TOKEN:  ${UPSTASH_REDIS_REST_TOKEN}
+      OUTPUTS_DIR:       /app/outputs
+      DUMPS_DIR:         /app/dumps
+      SYNC_BATCH_SIZE:   "500"
+      CLEANUP_DAYS:      "3"
+      MAX_CSV_AGE_HOURS: "2"
+    volumes:
+      - parser-outputs:/app/outputs
+      - parser-dumps:/app/dumps
+    networks:
+      - nearbit-net
+
+  # ── Scheduler (Ofelia) ────────────────────────────────────────────────────
+  # Runs the 3-step pipeline every 6 hours:
+  #   :00 — scraper downloads XML
+  #   :20 — parser converts XML → CSV
+  #   :40 — price-sync diffs and upserts to Supabase
+  scheduler:
+    image: mcuadros/ofelia:latest
+    container_name: nearbit-scheduler
+    restart: unless-stopped
+    depends_on: []
+    command: daemon --docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      ofelia.job-run.scraper.schedule:  "${SCRAPER_SCHEDULE_CRON:-0 */6 * * *}"
+      ofelia.job-run.scraper.container: "nearbit-scraper"
+      ofelia.job-run.parser.schedule:   "${PARSER_SCHEDULE_CRON:-20 */6 * * *}"
+      ofelia.job-run.parser.container:  "nearbit-parser"
+      ofelia.job-run.sync.schedule:     "${SYNC_SCHEDULE_CRON:-40 */6 * * *}"
+      ofelia.job-run.sync.container:    "nearbit-price-sync"
+    networks:
+      - nearbit-net
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  nearbit-net:
+    driver: bridge
+    name: nearbit-net
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  parser-dumps:
+    name: nearbit-parser-dumps
+  parser-outputs:
+    name: nearbit-parser-outputs

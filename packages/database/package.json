@@ -1,0 +1,15 @@
+{
+  "name": "@nearbit/database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Supabase migrations, seed data, and shared SQL for the Nearbit platform",
+  "scripts": {
+    "migrate": "supabase db push",
+    "migrate:local": "supabase db reset",
+    "seed": "supabase db seed",
+    "gen:types": "supabase gen types typescript --local > ../shared-types/src/supabase.ts && echo 'Types written to packages/shared-types/src/supabase.ts'"
+  },
+  "devDependencies": {
+    "supabase": "^1.178.0"
+  }
+}

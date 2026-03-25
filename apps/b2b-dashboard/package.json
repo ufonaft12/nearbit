@@ -1,5 +1,5 @@
 {
-  "name": "shoppyb2b",
+  "name": "@nearbit/b2b-dashboard",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -21,7 +21,7 @@
     "langfuse": "^3.31.0",
     "lucide-react": "^0.468.0",
     "next": "latest",
-    "next-intl": "^3.26.5",
+    "next-intl": "^4.8.3",
     "papaparse": "^5.4.1",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",

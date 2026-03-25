@@ -1,0 +1,26 @@
+{
+  "name": "nearbit-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nearbit polyglot monorepo — B2C, B2B, and market-parser services",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel -r --filter './apps/*' run dev",
+    "dev:b2c": "pnpm --filter @nearbit/b2c-client dev",
+    "dev:b2b": "pnpm --filter @nearbit/b2b-dashboard dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "type-check": "pnpm -r run type-check",
+    "docker:up": "docker compose up --build",
+    "docker:up:detached": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "db:types": "supabase gen types typescript --local > packages/shared-types/src/supabase.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
