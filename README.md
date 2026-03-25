@@ -1,21 +1,36 @@
 # Nearbit Platform
 
-Polyglot monorepo hosting the B2C storefront, B2B dashboard, and market-data ingestion pipeline.
+Polyglot monorepo hosting the B2C storefront, B2B dashboard, and a 3-stage market-data ingestion pipeline.
 
 ```
-nearbit-platform/
+nearbit/
 ├── apps/
-│   ├── b2c-client/        Next.js — consumer storefront  (port 3000)
-│   └── b2b-dashboard/     Next.js — merchant dashboard   (port 3001)
+│   ├── b2c-client/          Next.js — consumer storefront  (port 3000)
+│   └── b2b-dashboard/       Next.js — merchant dashboard   (port 3001)
 ├── services/
-│   └── market-parser/     Python  — Israeli supermarket price scraper
+│   ├── market-parser/       Python entrypoint for the parser container (main.py only)
+│   └── price-sync/          Python — diffs CSVs vs Redis, upserts to Supabase
 ├── packages/
-│   ├── shared-types/      TypeScript types shared by both Next.js apps
-│   └── database/          Supabase SQL migrations + type generator
-├── docker-compose.yml     Master orchestrator
-├── migrate.sh             One-time history-preserving monorepo migration
-└── .env.example           Environment variable template
+│   ├── shared-types/        TypeScript types shared by both Next.js apps
+│   └── database/            Supabase SQL migrations
+├── docker-compose.yml       Master orchestrator
+├── Makefile                 Convenience commands
+└── .env.example             Environment variable template
 ```
+
+---
+
+## Pipeline Overview
+
+The market-data pipeline runs every 6 hours via Ofelia scheduler:
+
+```
+:00  market-scraper   — downloads XML from supermarket servers → dumps/
+:20  market-parser    — converts XML dumps → price CSVs        → outputs/
+:40  price-sync       — diffs CSVs vs Redis, upserts changes   → Supabase
+```
+
+All three pipeline containers use `profiles: pipeline` — they are **not** started on `make up`, only created. Ofelia triggers them on schedule.
 
 ---
 
@@ -25,231 +40,161 @@ nearbit-platform/
 |------|-------------|---------|
 | Node.js | 20 | https://nodejs.org |
 | pnpm | 9 | `npm i -g pnpm` |
-| Python | 3.11 | https://python.org |
-| Poetry | 1.8 | `curl -sSL https://install.python-poetry.org \| python3 -` |
 | Docker Desktop | 25 | https://docker.com |
-| git-filter-repo | any | `pip install git-filter-repo` (migration only) |
 
 ---
 
-## Quick Start — one command
+## Quick Start
 
 ```bash
 # 1. Copy environment config
-cp .env.example .env
-# Fill in your Supabase URL, anon key, and service role key in .env
+cp .env.example .env.local
+# Fill in Supabase URL, keys, Upstash Redis URL/token in .env.local
 
-# 2. Start the entire platform
-docker compose up --build
+# 2. Build and start web apps + create pipeline containers
+make up
+
+# 3. (Optional) Run the full pipeline once manually
+make pipeline-run
 ```
 
-Services will be available at:
+Services:
 - B2C: http://localhost:3000
 - B2B: http://localhost:3001
-- Market parser runs internally (no public port)
+- Pipeline runs internally on schedule (no public port)
 
-Stop everything: `docker compose down`
+Stop everything: `make down`
 
 ---
 
 ## Local Development (without Docker)
-
-### Node.js apps
 
 ```bash
 # Install all workspace dependencies
 pnpm install
 
 # Run both apps in parallel
-pnpm dev
+pnpm --parallel -r --filter './apps/*' run dev
 
 # Or run individually
-pnpm dev:b2c    # http://localhost:3000
-pnpm dev:b2b    # http://localhost:3001
+pnpm --filter @nearbit/b2c-client dev     # http://localhost:3000
+pnpm --filter @nearbit/b2b-dashboard dev  # http://localhost:3001
 ```
-
-### Python market-parser
-
-```bash
-cd services/market-parser
-
-# Install dependencies (first time)
-poetry install
-
-# Run the scheduler
-poetry run python -m market_parser.scheduler
-
-# Or run a one-off parse
-poetry run python -m market_parser.run --chain shufersal
-```
-
----
-
-## Monorepo Migration (one-time)
-
-If you are migrating from the three separate source repositories for the first time:
-
-```bash
-# Check prerequisites
-bash migrate.sh --dry-run
-
-# Execute — rewrites commit history and merges all three repos
-bash migrate.sh
-
-# Verify history was preserved
-git log --oneline -- apps/b2c-client/
-git log --oneline -- apps/b2b-dashboard/
-git log --oneline -- services/market-parser/
-
-# Push to remote
-git remote add origin https://github.com/ufonaft12/nearbit.git
-git push -u origin main
-```
-
-**How history is preserved:** `migrate.sh` uses `git filter-repo --to-subdirectory-filter` to rewrite every commit of each source repo so all paths are prefixed with the target folder. The rewritten histories are then merged into this repo with `--allow-unrelated-histories`. This means `git log -- apps/b2c-client/` shows the original Shoppy commit history, not a single squash commit.
-
----
-
-## Next.js Standalone Output
-
-Both Next.js apps must have `output: 'standalone'` enabled for the Docker images to work correctly. Add to each `next.config.js`:
-
-```js
-const path = require('path')
-
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: 'standalone',
-  experimental: {
-    // Required so standalone knows where the monorepo root is
-    outputFileTracingRoot: path.join(__dirname, '../../'),
-  },
-}
-
-module.exports = nextConfig
-```
-
----
-
-## Keeping Python and TypeScript Types in Sync
-
-Both the Next.js apps and the Python parser read/write the **same Supabase database**. The strategy for keeping data shapes consistent:
-
-### Source of truth: SQL migrations
-
-`packages/database/migrations/` contains the authoritative schema. All table definitions, constraints, and RLS policies live here. Neither the TypeScript types nor the Python models are the source of truth — the SQL is.
-
-### TypeScript side
-
-After any schema change, regenerate types from the live Supabase instance:
-
-```bash
-pnpm db:types
-# Writes to: packages/shared-types/src/supabase.ts
-# Commit the generated file — it becomes part of the build
-```
-
-Both `@nearbit/b2c-client` and `@nearbit/b2b-dashboard` import from `@nearbit/shared-types`:
-
-```ts
-import type { Product, PriceComparisonResult } from '@nearbit/shared-types'
-import type { Database } from '@nearbit/shared-types/supabase'
-```
-
-### Python side
-
-`services/market-parser/market_parser/models.py` contains Pydantic models that mirror the same tables. Keep them in sync manually by reviewing the migration file whenever the SQL schema changes. Example Pydantic model:
-
-```python
-from pydantic import BaseModel
-from datetime import datetime
-
-class Product(BaseModel):
-    id: str
-    barcode: str
-    name: str
-    category: str | None
-    price_agorot: int
-    currency: str = 'ILS'
-    supermarket_chain: str
-    branch_id: str
-    scraped_at: datetime
-```
-
-### Change workflow
-
-1. Write a new SQL migration in `packages/database/migrations/`
-2. Apply it: `pnpm --filter @nearbit/database migrate`
-3. Regenerate TS types: `pnpm db:types`
-4. Update the matching Pydantic model in `services/market-parser/market_parser/models.py`
-5. Commit all three together in one PR
 
 ---
 
 ## Environment Variables
 
+Copy `.env.example` to `.env.local` and fill in:
+
 | Variable | Used by | Description |
 |----------|---------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | B2C, B2B | Supabase project URL (public, baked at build time) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | B2C, B2B | Supabase anon key (public, browser-safe) |
-| `SUPABASE_URL` | Parser | Supabase project URL (server-side) |
-| `SUPABASE_SERVICE_ROLE_KEY` | B2B, Parser | Full DB access — keep secret |
+| `NEXT_PUBLIC_SUPABASE_URL` | B2C, B2B, price-sync | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | B2C, B2B | Supabase anon key (browser-safe) |
+| `SUPABASE_SERVICE_ROLE_KEY` | B2B, price-sync | Full DB access — keep secret |
 | `DATABASE_URL` | Migrations | Direct Postgres URL for schema changes |
-| `MARKET_PARSER_INTERNAL_URL` | B2B | Internal Docker DNS to call the parser |
-| `PARSER_SCHEDULE_CRON` | Parser | Cron expression for scrape schedule |
+| `OPENAI_API_KEY` | B2C | Intent detection for search |
+| `UPSTASH_REDIS_REST_URL` | price-sync | Upstash Redis REST URL |
+| `UPSTASH_REDIS_REST_TOKEN` | price-sync | Upstash Redis REST token |
+| `LANGFUSE_SECRET_KEY` | B2C | LLM observability (optional) |
+| `LANGFUSE_PUBLIC_KEY` | B2C | LLM observability (optional) |
+| `ENABLED_SCRAPERS` | market-scraper | Comma-separated chains to scrape |
+| `ENABLED_PARSERS` | market-parser | Comma-separated chains to parse |
+| `ENABLED_FILE_TYPES` | scraper, parser | e.g. `PRICE_FILE,STORE_FILE` |
+| `SCRAPER_LIMIT` | market-scraper | Files per chain per run (1 = fast test) |
+| `PARSER_LIMIT` | market-parser | Files per chain per run |
+| `KAGGLE_API_TOKEN` | market-scraper | Kaggle API token (format: `KGAT_...`) |
 
 ---
 
 ## Docker Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  nearbit-net (bridge network)                   │
-│                                                 │
-│  ┌──────────────┐    ┌──────────────┐           │
-│  │ b2c-client   │    │ b2b-dashboard│           │
-│  │ :3000        │    │ :3001        │           │
-│  └──────────────┘    └──────┬───────┘           │
-│                             │ HTTP               │
-│                      ┌──────▼───────┐           │
-│                      │market-parser │           │
-│                      │ (no public   │           │
-│                      │  port)       │           │
-│                      └──────┬───────┘           │
-│                             │                   │
-└─────────────────────────────┼───────────────────┘
-                              │ Supabase client
-                         ┌────▼────┐
-                         │Supabase │
-                         │(managed)│
-                         └─────────┘
+nearbit-net (bridge)
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│  ┌──────────────┐      ┌──────────────────┐             │
+│  │  b2c-client  │      │  b2b-dashboard   │             │
+│  │   :3000      │      │     :3001        │             │
+│  └──────────────┘      └──────────────────┘             │
+│                                                         │
+│  pipeline (profile=pipeline, triggered by Ofelia)       │
+│  ┌────────────────┐  dumps/  ┌───────────────┐          │
+│  │ market-scraper │ ──────►  │ market-parser │          │
+│  └────────────────┘          └───────┬───────┘          │
+│                               outputs/│                  │
+│                         ┌────────────▼──────┐           │
+│                         │    price-sync     │           │
+│                         └────────────┬──────┘           │
+│                                      │                  │
+│            ┌─────────────────────────┼──────────┐       │
+│            │  Upstash Redis          │ Supabase │       │
+│            │  (price state cache)    │ (DB)     │       │
+│            └─────────────────────────┴──────────┘       │
+└─────────────────────────────────────────────────────────┘
 ```
-
-All three services connect to the same Supabase instance. The parser and B2B dashboard communicate over the internal `nearbit-net` network using Docker's built-in DNS (`http://market-parser:8000`).
 
 ---
 
-## Useful Commands
+## Makefile Commands
 
 ```bash
 # Docker
-docker compose up --build -d          # start detached
-docker compose logs -f market-parser  # tail parser logs
-docker compose exec b2b-dashboard sh  # shell into B2B container
-docker compose down -v                # stop and remove volumes
+make up              # Build web apps + create pipeline containers
+make up-d            # Same, detached
+make down            # Stop all services
+make down-v          # Stop and remove volumes
+make restart         # down + up
+make logs            # Tail all logs
+make logs-b2c        # Tail B2C logs
+make logs-b2b        # Tail B2B logs
+make ps              # Show container status
+make clean           # Remove containers, volumes, images
 
-# pnpm workspace
-pnpm --filter @nearbit/b2c-client add <pkg>    # add dep to B2C only
-pnpm --filter @nearbit/shared-types build      # build shared types
-pnpm -r run lint                               # lint all packages
+# Pipeline (manual runs)
+make scraper-run     # Run scraper once
+make parser-run      # Run parser once
+make sync-run        # Run price-sync once
+make pipeline-run    # Run all 3 stages sequentially
 
-# Database
-pnpm --filter @nearbit/database migrate        # push migrations to Supabase
-pnpm db:types                                  # regenerate TS types
+# Debug shells
+make scraper-shell   # bash into scraper container
+make parser-shell    # bash into parser container
 
-# Python
-cd services/market-parser
-poetry add <pkg>                               # add a dependency
-poetry run pytest                              # run tests
-poetry run ruff check .                        # lint
+# Local dev
+make install         # pnpm install
+make dev             # Run B2C + B2B in parallel
+make dev-b2c         # Run B2C only
+make dev-b2b         # Run B2B only
+
+# Tests
+make test            # Run all JS tests
+make test-parser     # Run Python parser tests in Docker
 ```
+
+---
+
+## Database Migrations
+
+SQL migrations live in `packages/database/migrations/`. To apply:
+
+```bash
+# Apply all migrations to Supabase
+psql $DATABASE_URL -f packages/database/migrations/0001_initial_schema.sql
+psql $DATABASE_URL -f packages/database/migrations/0002_market_sync.sql
+```
+
+After schema changes, regenerate TypeScript types:
+
+```bash
+npx supabase gen types typescript --project-id <project-id> \
+  > packages/shared-types/src/supabase.ts
+```
+
+---
+
+## Supported Supermarket Chains
+
+`BAREKET`, `YAYNO_BITAN_AND_CARREFOUR`, `SHUFERSAL`, `RAMI_LEVY`, `VICTORY`, `HAZI_HINAM`, `TIV_TAAM`, `OSHER_AD`, `SUPER_PHARM`, `COFIX`
+
+Configure via `ENABLED_SCRAPERS` / `ENABLED_PARSERS` in `.env.local`.
